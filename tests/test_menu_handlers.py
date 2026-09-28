@@ -157,8 +157,11 @@ async def test_edit_account_label(session_factory, seed_user_and_accounts):
     msg_update.effective_user.id = 101
     msg_update.message.text = "GitHub Work"
     msg_update.message.reply_text = AsyncMock()
+    msg_update.message.delete = AsyncMock()
 
     await handle_save_new_label(msg_update, context)
+
+    msg_update.message.delete.assert_awaited_once()
 
     # Verify label changed in DB
     async with session_factory() as session:
@@ -190,9 +193,11 @@ async def test_search_accounts(session_factory, seed_user_and_accounts):
     msg_update.effective_user.id = 101
     msg_update.message.text = "git"
     msg_update.message.reply_text = AsyncMock()
+    msg_update.message.delete = AsyncMock()
 
     await handle_search_query_message(msg_update, context)
 
+    msg_update.message.delete.assert_awaited_once()
     msg_update.message.reply_text.assert_called_once()
     args, kwargs = msg_update.message.reply_text.call_args
     assert "Hasil pencarian" in args[0]

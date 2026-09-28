@@ -213,8 +213,10 @@ async def test_import_backup_flow(session_factory, seed_user_with_secret):
     doc_file.download_as_bytearray = AsyncMock(return_value=bytearray(backup_bytes))
     doc_update.message.document.get_file = AsyncMock(return_value=doc_file)
     doc_update.message.reply_text = AsyncMock()
+    doc_update.message.delete = AsyncMock()
 
     await handle_import_file_document(doc_update, context)
+    doc_update.message.delete.assert_awaited_once()
     assert context.user_data["settings_state"] == "awaiting_import_passphrase"
     assert context.user_data["import_file_bytes"] == backup_bytes
 
@@ -223,8 +225,10 @@ async def test_import_backup_flow(session_factory, seed_user_with_secret):
     pass_update.effective_user.id = user_id
     pass_update.message.text = passphrase
     pass_update.message.reply_text = AsyncMock()
+    pass_update.message.delete = AsyncMock()
 
     await handle_import_passphrase_message(pass_update, context)
+    pass_update.message.delete.assert_awaited_once()
     assert len(context.user_data["import_accounts_data"]) == 1
     assert context.user_data["import_accounts_data"][0]["label"] == "Imported Slack"
 

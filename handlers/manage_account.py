@@ -129,8 +129,12 @@ async def handle_edit_label_prompt(
     ])
     if query:
         await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        if query.message:
+            context.user_data["prompt_msg_id"] = query.message.message_id
     elif update.message:
-        await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        sent = await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        if sent and hasattr(sent, "message_id"):
+            context.user_data["prompt_msg_id"] = sent.message_id
 
 
 async def handle_save_new_label(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -141,6 +145,20 @@ async def handle_save_new_label(update: Update, context: ContextTypes.DEFAULT_TY
     new_label = (update.message.text or "").strip()
     account_id = context.user_data.pop("edit_acc_id", None)
     context.user_data.pop("manage_state", None)
+
+    # Automatically delete user message with new label
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Automatically delete previous prompt message
+    old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+    if old_prompt_id and update.effective_chat:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+        except Exception:
+            pass
 
     if not new_label or not account_id:
         await update.message.reply_text("Label tidak boleh kosong. Perubahan dibatalkan.")

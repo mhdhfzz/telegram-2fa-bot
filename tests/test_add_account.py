@@ -109,3 +109,48 @@ async def test_manual_input_flow_and_pin_encryption(session_factory, seed_user):
         key = derive_encryption_key("654321", seed_user.kdf_salt)
         decrypted = decrypt_secret(key, account.secret_encrypted, account.nonce)
         assert decrypted == "JBSWY3DPEHPK3PXP"
+
+
+@pytest.mark.asyncio
+async def test_manual_input_auto_deletion(session_factory, seed_user):
+    user_id = seed_user.telegram_user_id
+    update = MagicMock()
+    update.effective_user.id = user_id
+    update.effective_chat.id = 9999
+    update.message.text = "JBSWY3DPEHPK3PXP"
+    update.message.delete = AsyncMock()
+
+    sent_label_prompt = MagicMock()
+    sent_label_prompt.message_id = 101
+    update.message.reply_text = AsyncMock(return_value=sent_label_prompt)
+
+    context = MagicMock()
+    context.user_data = {
+        "add_state": "awaiting_manual_secret",
+        "prompt_msg_id": 100,
+    }
+    context.bot_data = {"session_factory": session_factory}
+    context.bot.delete_message = AsyncMock()
+
+    # Step 1: User sends Secret Key
+    await handle_manual_secret_input(update, context)
+
+    # Verify user message was deleted
+    update.message.delete.assert_awaited_once()
+    # Verify old prompt (100) was deleted
+    context.bot.delete_message.assert_awaited_with(chat_id=9999, message_id=100)
+    # Verify new prompt ID (101) was saved
+    assert context.user_data.get("prompt_msg_id") == 101
+
+    # Step 2: User sends Label
+    update.message.delete.reset_mock()
+    context.bot.delete_message.reset_mock()
+    update.message.text = "Google Work"
+
+    await handle_manual_label_input(update, context)
+
+    # Verify user label message was deleted
+    update.message.delete.assert_awaited_once()
+    # Verify old label prompt (101) was deleted
+    context.bot.delete_message.assert_awaited_with(chat_id=9999, message_id=101)
+

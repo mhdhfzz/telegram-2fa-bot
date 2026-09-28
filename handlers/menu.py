@@ -69,14 +69,35 @@ async def handle_search_account_prompt(update: Update, context: ContextTypes.DEF
     ])
     if query:
         await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        if query.message:
+            context.user_data["prompt_msg_id"] = query.message.message_id
     elif update.message:
-        await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        sent = await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        if sent and hasattr(sent, "message_id"):
+            context.user_data["prompt_msg_id"] = sent.message_id
 
 
 async def handle_search_query_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Process user search query and list matching accounts."""
+    if context.user_data.get("menu_state") != "awaiting_search_query":
+        return
+
     search_query = (update.message.text or "").strip()
     context.user_data.pop("menu_state", None)
+
+    # Automatically delete user message with search query
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Automatically delete previous prompt message
+    old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+    if old_prompt_id and update.effective_chat:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+        except Exception:
+            pass
 
     if not search_query:
         await update.message.reply_text("Pencarian dibatalkan.")

@@ -58,6 +58,7 @@ BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
 DB_PATH=/opt/telegram-2fa-bot/2fa_bot.db
 LOG_LEVEL=INFO
 PIN_LENGTH=6
+AUTO_DELETE_SECONDS=90
 ```
 
 Atur permission ketat:

@@ -52,6 +52,9 @@ async def handle_choose_scan_qr(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
 
     context.user_data["add_state"] = "awaiting_qr"
+    if query.message:
+        context.user_data["prompt_msg_id"] = query.message.message_id
+
     text = (
         "📷 **Kirim Foto QR Code**\n\n"
         "Silakan kirimkan foto atau screenshot QR code authenticator Anda ke chat ini.\n\n"
@@ -80,6 +83,21 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     photo_bytes = await photo_file.download_as_bytearray()
 
+    # Automatically delete user photo to protect sensitive QR secret
+    if update.message:
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+    # Automatically delete previous prompt message
+    old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+    if old_prompt_id and update.effective_chat:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+        except Exception:
+            pass
+
     decoded_uri = decode_qr_image(bytes(photo_bytes))
     if not decoded_uri:
         fail_text = (
@@ -91,13 +109,14 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             [InlineKeyboardButton("⌨️ Coba Input Manual", callback_data="add_acc:manual")],
             [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")],
         ])
-        await update.message.reply_text(fail_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        sent = await update.effective_chat.send_message(fail_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        context.user_data["prompt_msg_id"] = sent.message_id
         return
 
     try:
         parsed = parse_otpauth_uri(decoded_uri)
     except Exception as exc:
-        await update.message.reply_text(f"❌ Format URI OTP tidak valid: {str(exc)}")
+        await update.effective_chat.send_message(f"❌ Format URI OTP tidak valid: {str(exc)}")
         return
 
     context.user_data["pending_account"] = parsed
@@ -115,7 +134,7 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("add_acc_pin", show_cancel=True)
-    await update.message.reply_text(prompt_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    await update.effective_chat.send_message(prompt_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
 
 async def handle_choose_manual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -123,6 +142,9 @@ async def handle_choose_manual(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
 
     context.user_data["add_state"] = "awaiting_manual_secret"
+    if query.message:
+        context.user_data["prompt_msg_id"] = query.message.message_id
+
     text = (
         "⌨️ **Input Secret Key Manual**\n\n"
         "Ketik dan kirimkan **Secret Key** (Base32) dari layanan Anda:\n"
@@ -142,22 +164,46 @@ async def handle_manual_secret_input(update: Update, context: ContextTypes.DEFAU
     cleaned_secret = clean_base32_secret(raw_secret)
 
     if not cleaned_secret or not re.match(r"^[A-Z2-7=]+$", cleaned_secret):
-        await update.message.reply_text(
+        sent_err = await update.message.reply_text(
             "❌ **Secret Key tidak valid!**\n\n"
             "Secret key Base32 hanya boleh berisi huruf A-Z dan angka 2-7 (tanpa spasi). "
             "Silakan ketik ulang Secret Key yang benar:"
         )
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+        if old_prompt_id and update.effective_chat:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+            except Exception:
+                pass
+        if sent_err and hasattr(sent_err, "message_id"):
+            context.user_data["prompt_msg_id"] = sent_err.message_id
         return
 
     import pyotp
     try:
         _ = pyotp.TOTP(cleaned_secret).now()
     except Exception:
-        await update.message.reply_text(
+        sent_err = await update.message.reply_text(
             "❌ **Secret Key tidak valid!**\n\n"
             "Secret key tidak dapat didekode sebagai Base32 yang valid. "
             "Silakan periksa dan ketik ulang Secret Key yang benar:"
         )
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+        if old_prompt_id and update.effective_chat:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+            except Exception:
+                pass
+        if sent_err and hasattr(sent_err, "message_id"):
+            context.user_data["prompt_msg_id"] = sent_err.message_id
         return
 
     context.user_data["manual_secret"] = cleaned_secret
@@ -168,7 +214,24 @@ async def handle_manual_secret_input(update: Update, context: ContextTypes.DEFAU
         "Sekarang, masukkan nama **Label / Layanan** untuk akun ini:\n"
         "Contoh: `GitHub: alice` atau `Google Work`"
     )
-    await update.message.reply_text(prompt_text, parse_mode=ParseMode.MARKDOWN)
+    sent_prompt = await update.message.reply_text(prompt_text, parse_mode=ParseMode.MARKDOWN)
+
+    # Automatically delete user message containing plaintext secret
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Automatically delete previous prompt message
+    old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+    if old_prompt_id and update.effective_chat:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+        except Exception:
+            pass
+
+    if sent_prompt and hasattr(sent_prompt, "message_id"):
+        context.user_data["prompt_msg_id"] = sent_prompt.message_id
 
 
 async def handle_manual_label_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -177,7 +240,19 @@ async def handle_manual_label_input(update: Update, context: ContextTypes.DEFAUL
 
     label = (update.message.text or "").strip()
     if not label:
-        await update.message.reply_text("Silakan masukkan nama label yang tidak kosong:")
+        sent_err = await update.message.reply_text("Silakan masukkan nama label yang tidak kosong:")
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+        if old_prompt_id and update.effective_chat:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+            except Exception:
+                pass
+        if sent_err and hasattr(sent_err, "message_id"):
+            context.user_data["prompt_msg_id"] = sent_err.message_id
         return
 
     secret = context.user_data.get("manual_secret")
@@ -214,6 +289,21 @@ async def handle_manual_label_input(update: Update, context: ContextTypes.DEFAUL
     )
     markup = build_keypad_keyboard("add_acc_pin", show_cancel=True)
     await update.message.reply_text(prompt_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+    # Automatically delete user message with label
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Automatically delete previous prompt message
+    old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+    if old_prompt_id and update.effective_chat:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+        except Exception:
+            pass
+
 
 
 async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

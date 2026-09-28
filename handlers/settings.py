@@ -330,6 +330,8 @@ async def handle_export_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                     "⚠️ *PENTING: Jangan gunakan PIN login Anda! Buat passphrase yang kuat (minimal 4 karakter).*"
                 )
                 await query.edit_message_text(prompt_text, parse_mode=ParseMode.MARKDOWN)
+                if query.message:
+                    context.user_data["prompt_msg_id"] = query.message.message_id
     else:
         text = (
             "📤 **Ekspor Cadangan (Backup)**\n\n"
@@ -348,11 +350,37 @@ async def handle_export_passphrase_message(
 
     passphrase = (update.message.text or "").strip()
     if len(passphrase) < 4:
-        await update.message.reply_text("Passphrase terlalu pendek. Minimal 4 karakter:")
+        sent_err = await update.message.reply_text("❌ Passphrase terlalu pendek. Minimal 4 karakter:")
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+        if old_prompt_id and update.effective_chat:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+            except Exception:
+                pass
+        if sent_err and hasattr(sent_err, "message_id"):
+            context.user_data["prompt_msg_id"] = sent_err.message_id
         return
 
     pin = context.user_data.pop("export_auth_pin", None)
     context.user_data.pop("settings_state", None)
+
+    # Automatically delete user message containing the passphrase
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Automatically delete previous prompt message
+    old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+    if old_prompt_id and update.effective_chat:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+        except Exception:
+            pass
 
     session_factory = context.bot_data.get("session_factory")
     user_id = update.effective_user.id
@@ -487,8 +515,12 @@ async def handle_import_backup_start(update: Update, context: ContextTypes.DEFAU
     ])
     if query:
         await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        if query.message:
+            context.user_data["prompt_msg_id"] = query.message.message_id
     elif update.message:
-        await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        sent = await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        if sent and hasattr(sent, "message_id"):
+            context.user_data["prompt_msg_id"] = sent.message_id
 
 
 async def handle_import_file_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -511,7 +543,24 @@ async def handle_import_file_document(update: Update, context: ContextTypes.DEFA
         "File backup diterima! Sekarang, ketik dan kirimkan **Passphrase** "
         "yang Anda buat saat mengekspor file ini:"
     )
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    sent_prompt = await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # Automatically delete uploaded document message
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Automatically delete previous prompt message
+    old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+    if old_prompt_id and update.effective_chat:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+        except Exception:
+            pass
+
+    if sent_prompt and hasattr(sent_prompt, "message_id"):
+        context.user_data["prompt_msg_id"] = sent_prompt.message_id
 
 
 async def handle_import_passphrase_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -530,10 +579,22 @@ async def handle_import_passphrase_message(update: Update, context: ContextTypes
     try:
         accounts_data = import_accounts_backup(backup_bytes, passphrase)
     except Exception:
-        await update.message.reply_text(
+        sent_err = await update.message.reply_text(
             "❌ **Passphrase salah atau file rusak!**\n\n"
             "Gagal mendekripsi file cadangan. Silakan ketik ulang Passphrase yang benar:"
         )
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+        if old_prompt_id and update.effective_chat:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+            except Exception:
+                pass
+        if sent_err and hasattr(sent_err, "message_id"):
+            context.user_data["prompt_msg_id"] = sent_err.message_id
         return
 
     context.user_data["import_accounts_data"] = accounts_data
@@ -549,7 +610,24 @@ async def handle_import_passphrase_message(update: Update, context: ContextTypes
         f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("import_pin", show_cancel=True)
-    await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    sent_prompt = await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+    # Automatically delete user message containing passphrase
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Automatically delete previous prompt message
+    old_prompt_id = context.user_data.pop("prompt_msg_id", None)
+    if old_prompt_id and update.effective_chat:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=old_prompt_id)
+        except Exception:
+            pass
+
+    if sent_prompt and hasattr(sent_prompt, "message_id"):
+        context.user_data["prompt_msg_id"] = sent_prompt.message_id
 
 
 async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
