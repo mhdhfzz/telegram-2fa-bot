@@ -22,13 +22,30 @@ from services.log_service import get_user_logs, log_action
 
 
 async def auto_delete_phrase_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    job = context.job
+    chat_id = job.chat_id if job else None
+    message_id = job.data if job else None
     try:
-        chat_id = context.job.chat_id
-        message_id = context.job.data
         if chat_id and message_id:
             await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
     except Exception:
         pass
+
+    if chat_id:
+        try:
+            from handlers.menu import get_main_menu_keyboard
+            menu_text = (
+                "🔐 **Telegram 2FA Authenticator**\n\n"
+                "Pilih menu di bawah ini untuk melihat kode OTP atau mengelola akun Anda:"
+            )
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=menu_text,
+                reply_markup=get_main_menu_keyboard(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception:
+            pass
 
 
 async def handle_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

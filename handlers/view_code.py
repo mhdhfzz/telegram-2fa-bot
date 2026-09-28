@@ -42,14 +42,35 @@ def cancel_view_code_jobs(context: ContextTypes.DEFAULT_TYPE, chat_id: int, mess
 
 
 async def view_code_auto_delete_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Delete OTP message after configured lifetime."""
-    try:
-        chat_id = context.job.chat_id
-        message_id = context.job.data
-        if chat_id and message_id:
+    """Delete OTP message after configured lifetime and restore main menu."""
+    job = context.job
+    chat_id = job.chat_id if job else None
+    message_id = job.data if job else None
+
+    if chat_id and message_id:
+        try:
             await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except Exception:
-        pass
+        except Exception:
+            pass
+
+    if context.user_data:
+        context.user_data.pop("active_view", None)
+
+    if chat_id:
+        try:
+            from handlers.menu import get_main_menu_keyboard
+            menu_text = (
+                "🔐 **Telegram 2FA Authenticator**\n\n"
+                "Pilih menu di bawah ini untuk melihat kode OTP atau mengelola akun Anda:"
+            )
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=menu_text,
+                reply_markup=get_main_menu_keyboard(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception:
+            pass
 
 
 async def view_code_countdown_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -484,6 +505,7 @@ async def handle_view_code_pin_keypad(
                     view_code_auto_delete_job,
                     when=auto_del_secs,
                     chat_id=chat_id,
+                    user_id=update.effective_user.id if update.effective_user else None,
                     data=msg_id,
                     name=f"autodel_{chat_id}_{msg_id}",
                 )

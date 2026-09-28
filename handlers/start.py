@@ -17,13 +17,30 @@ from handlers.keypad import (
 
 
 async def auto_delete_message_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    job = context.job
+    chat_id = job.chat_id if job else None
+    message_id = job.data if job else None
     try:
-        chat_id = context.job.chat_id
-        message_id = context.job.data
         if chat_id and message_id:
             await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
     except Exception:
         pass
+
+    if chat_id:
+        try:
+            from handlers.menu import get_main_menu_keyboard
+            menu_text = (
+                "🔐 **Telegram 2FA Authenticator**\n\n"
+                "Pilih menu di bawah ini untuk melihat kode OTP atau mengelola akun Anda:"
+            )
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=menu_text,
+                reply_markup=get_main_menu_keyboard(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception:
+            pass
 
 
 async def handle_start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -48,6 +65,8 @@ async def handle_start_command(update: Update, context: ContextTypes.DEFAULT_TYP
     text = (
         "🔐 **Selamat datang di Telegram 2FA Authenticator!**\n\n"
         "Data akun Anda akan dienkripsi dengan standar AES-256-GCM menggunakan PIN pribadi Anda.\n\n"
+        "🛡️ **Jaminan Privasi & Keamanan:**\n"
+        "Bot ini **TIDAK MENYIMPAN data Anda ke server/cloud Telegram**. Seluruh database akun tersimpan mandiri secara lokal (Self-Hosted VPS), dan kunci enkripsi hanya diturunkan dari PIN pribadi Anda (Zero Master Key).\n\n"
         f"Silakan buat **PIN {pin_len} digit** Anda menggunakan keypad di bawah:\n\n"
         f"`{render_pin_display(0, max_length=pin_len)}`"
     )

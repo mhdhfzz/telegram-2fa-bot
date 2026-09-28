@@ -14,6 +14,8 @@ sudo apt install -y python3 python3-pip python3-venv libzbar0 git
 ```
 
 > **Penting**: Paket `libzbar0` wajib dipasang agar fitur decode QR code dari foto via `pyzbar` dapat berjalan optimal di Linux VPS.
+> 
+> 🛡️ **Privasi & Keamanan Data (Zero Telegram Storage)**: Seluruh database pengguna (`2fa_bot.db`) tersimpan secara eksklusif dan lokal di server VPS Anda. Bot **sama sekali tidak menyimpan data akun ke server atau cloud Telegram**. Semua secret akun dienkripsi menggunakan AES-256-GCM dengan kunci yang diturunkan dari PIN masing-masing pengguna (Zero Master Key).
 
 ---
 

@@ -245,3 +245,32 @@ async def test_cancel_view_code_jobs():
     countdown_job.schedule_removal.assert_called_once()
     autodel_job.schedule_removal.assert_called_once()
 
+
+@pytest.mark.asyncio
+async def test_view_code_auto_delete_job_restores_menu():
+    from handlers.view_code import view_code_auto_delete_job
+
+    job = MagicMock()
+    job.chat_id = 8888
+    job.data = 777
+
+    context = MagicMock()
+    context.job = job
+    context.user_data = {"active_view": {"account_id": 1}}
+    context.bot.delete_message = AsyncMock()
+    context.bot.send_message = AsyncMock()
+
+    await view_code_auto_delete_job(context)
+
+    # Verifies OTP message was deleted
+    context.bot.delete_message.assert_awaited_once_with(chat_id=8888, message_id=777)
+    # Verifies active_view was cleared
+    assert "active_view" not in context.user_data
+    # Verifies main menu was sent back
+    context.bot.send_message.assert_awaited_once()
+    call_kwargs = context.bot.send_message.call_args[1]
+    assert call_kwargs["chat_id"] == 8888
+    assert "Telegram 2FA Authenticator" in call_kwargs["text"]
+    assert call_kwargs["reply_markup"] is not None
+
+
