@@ -162,3 +162,92 @@ async def test_view_logs_paginated(session_factory, seed_user_with_secret):
     texts = [btn.text for row in kb for btn in row]
     # Page 1 of 2 should have Next button
     assert any("Next" in t or "▶️" in t for t in texts)
+
+
+@pytest.mark.asyncio
+async def test_import_backup_flow(session_factory, seed_user_with_secret):
+    from handlers.settings import (
+        handle_import_backup_start,
+        handle_import_file_document,
+        handle_import_passphrase_message,
+        handle_import_pin_keypad,
+    )
+    from services.backup_service import export_accounts_backup
+
+    user, _ = seed_user_with_secret
+    user_id = user.telegram_user_id
+
+    # Create dummy backup payload
+    raw_backup = [
+        {
+            "label": "Imported Slack",
+            "issuer": "Slack",
+            "secret": "JBSWY3DPEHPK3PXP",
+            "type": "totp",
+            "digits": 6,
+            "period": 30,
+        }
+    ]
+    passphrase = "my_secure_passphrase"
+    backup_bytes = export_accounts_backup(raw_backup, passphrase)
+
+    # Step 1: Start import
+    update = MagicMock()
+    update.effective_user.id = user_id
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    await handle_import_backup_start(update, context)
+    assert context.user_data["settings_state"] == "awaiting_import_file"
+
+    # Step 2: Upload document
+    doc_update = MagicMock()
+    doc_update.effective_user.id = user_id
+    doc_file = MagicMock()
+    doc_file.download_as_bytearray = AsyncMock(return_value=bytearray(backup_bytes))
+    doc_update.message.document.get_file = AsyncMock(return_value=doc_file)
+    doc_update.message.reply_text = AsyncMock()
+
+    await handle_import_file_document(doc_update, context)
+    assert context.user_data["settings_state"] == "awaiting_import_passphrase"
+    assert context.user_data["import_file_bytes"] == backup_bytes
+
+    # Step 3: Send passphrase
+    pass_update = MagicMock()
+    pass_update.effective_user.id = user_id
+    pass_update.message.text = passphrase
+    pass_update.message.reply_text = AsyncMock()
+
+    await handle_import_passphrase_message(pass_update, context)
+    assert len(context.user_data["import_accounts_data"]) == 1
+    assert context.user_data["import_accounts_data"][0]["label"] == "Imported Slack"
+
+    # Step 4: PIN Keypad confirmation with user PIN "111222"
+    keypad_update = MagicMock()
+    keypad_update.effective_user.id = user_id
+    keypad_query = MagicMock()
+    keypad_query.answer = AsyncMock()
+    keypad_query.edit_message_text = AsyncMock()
+    keypad_update.callback_query = keypad_query
+
+    for digit in "111222":
+        keypad_query.data = f"import_pin:key:{digit}"
+        await handle_import_pin_keypad(keypad_update, context)
+
+    # Step 5: Verify account is in DB and decryptable with user's PIN
+    async with session_factory() as session:
+        acc_stmt = select(Account).where(Account.label == "Imported Slack")
+        imported_acc = (await session.execute(acc_stmt)).scalars().first()
+        assert imported_acc is not None
+        assert imported_acc.issuer == "Slack"
+
+        db_user = await session.get(User, user.id)
+        key = derive_encryption_key("111222", db_user.kdf_salt)
+        decrypted_secret = decrypt_secret(key, imported_acc.secret_encrypted, imported_acc.nonce)
+        assert decrypted_secret == "JBSWY3DPEHPK3PXP"

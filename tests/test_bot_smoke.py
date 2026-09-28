@@ -7,6 +7,6 @@ def test_bot_application_creation():
     assert app is not None
     assert app.bot is not None
 
-    # Check registered handlers (Command, CallbackQuery, Photo message, Text message)
+    # Check registered handlers (Command, CallbackQuery, Photo message, Document message, Text message)
     handler_count = sum(len(handlers) for handlers in app.handlers.values())
-    assert handler_count == 4
+    assert handler_count == 5

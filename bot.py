@@ -25,17 +25,28 @@ from handlers.add_account import (
 from handlers.manage_account import (
     handle_delete_account_pin_keypad,
     handle_delete_prompt,
+    handle_edit_label_prompt,
     handle_list_accounts_to_manage,
+    handle_save_new_label,
     handle_show_account_detail,
     handle_toggle_favorite,
 )
-from handlers.menu import show_main_menu
+from handlers.menu import (
+    handle_search_account_prompt,
+    handle_search_query_message,
+    show_main_menu,
+)
 from handlers.settings import (
     handle_change_pin_keypad,
     handle_change_pin_start,
+    handle_confirm_phrase_settings,
     handle_export_backup_start,
     handle_export_passphrase_message,
     handle_export_pin_keypad,
+    handle_import_backup_start,
+    handle_import_file_document,
+    handle_import_passphrase_message,
+    handle_import_pin_keypad,
     handle_settings_menu,
     handle_view_logs_callback,
 )
@@ -79,9 +90,9 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data == "menu:settings":
         await handle_settings_menu(update, context)
     elif data == "menu:favorite_accounts":
-        await handle_view_code_menu(update, context)
+        await handle_view_code_menu(update, context, favorites_only=True)
     elif data == "menu:search_account":
-        await query.answer("Fitur pencarian: kirimkan kata kunci label", show_alert=False)
+        await handle_search_account_prompt(update, context)
     elif data == "add_acc:scan_qr":
         await handle_choose_scan_qr(update, context)
     elif data == "add_acc:manual":
@@ -98,6 +109,9 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("manage:detail:"):
         acc_id = int(data.split(":")[2])
         await handle_show_account_detail(update, context, acc_id)
+    elif data.startswith("manage:edit_label:"):
+        acc_id = int(data.split(":")[2])
+        await handle_edit_label_prompt(update, context, acc_id)
     elif data.startswith("manage:fav:"):
         acc_id = int(data.split(":")[2])
         await handle_toggle_favorite(update, context, acc_id)
@@ -108,12 +122,18 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await handle_delete_account_pin_keypad(update, context)
     elif data == "settings:change_pin":
         await handle_change_pin_start(update, context)
+    elif data == "settings:confirm_phrase":
+        await handle_confirm_phrase_settings(update, context)
     elif data.startswith("ch_pin_old:") or data.startswith("ch_pin_new1:") or data.startswith("ch_pin_new2:"):
         await handle_change_pin_keypad(update, context)
     elif data == "settings:export":
         await handle_export_backup_start(update, context)
     elif data.startswith("export_pin:"):
         await handle_export_pin_keypad(update, context)
+    elif data == "settings:import":
+        await handle_import_backup_start(update, context)
+    elif data.startswith("import_pin:"):
+        await handle_import_pin_keypad(update, context)
     elif data.startswith("settings:logs:"):
         await handle_view_logs_callback(update, context)
 
@@ -127,9 +147,34 @@ async def text_message_dispatcher(update: Update, context: ContextTypes.DEFAULT_
         await handle_manual_label_input(update, context)
         return
 
+    manage_state = context.user_data.get("manage_state")
+    if manage_state == "awaiting_new_label":
+        await handle_save_new_label(update, context)
+        return
+
+    menu_state = context.user_data.get("menu_state")
+    if menu_state == "awaiting_search_query":
+        await handle_search_query_message(update, context)
+        return
+
     settings_state = context.user_data.get("settings_state")
     if settings_state == "awaiting_export_passphrase":
         await handle_export_passphrase_message(update, context)
+        return
+    elif settings_state == "awaiting_import_passphrase":
+        await handle_import_passphrase_message(update, context)
+        return
+
+
+async def document_message_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings_state = context.user_data.get("settings_state")
+    if settings_state == "awaiting_import_file":
+        await handle_import_file_document(update, context)
+        return
+
+    add_state = context.user_data.get("add_state")
+    if add_state == "awaiting_qr":
+        await handle_qr_photo(update, context)
         return
 
 
@@ -157,6 +202,7 @@ def create_application(
     app.add_handler(CommandHandler("start", handle_start_command))
     app.add_handler(CallbackQueryHandler(callback_router))
     app.add_handler(MessageHandler(filters.PHOTO, handle_qr_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL, document_message_dispatcher))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_dispatcher))
 
     return app

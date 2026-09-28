@@ -123,3 +123,34 @@ async def test_view_code_correct_pin_displays_monospace_otp(
     # Progress bar and auto-delete job
     assert "⏳" in last_text
     context.job_queue.run_once.assert_called_once()
+    context.job_queue.run_repeating.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_view_code_html_escaping_and_countdown_job(session_factory):
+    from handlers.view_code import view_code_countdown_job
+
+    job = MagicMock()
+    job.data = {
+        "chat_id": 999,
+        "message_id": 888,
+        "period": 30,
+        "label": "<User & Team>",
+        "emoji": "🔐",
+        "code_html": "<code>123456</code>",
+        "account_id": 1,
+    }
+    job.schedule_removal = MagicMock()
+
+    context = MagicMock()
+    context.job = job
+    context.bot.edit_message_text = AsyncMock()
+
+    await view_code_countdown_job(context)
+
+    context.bot.edit_message_text.assert_called_once()
+    edited_text = context.bot.edit_message_text.call_args[1]["text"]
+    # Verify HTML escaping
+    assert "&lt;User &amp; Team&gt;" in edited_text
+    assert "<User & Team>" not in edited_text
+    assert "<code>123456</code>" in edited_text

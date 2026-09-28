@@ -7,7 +7,7 @@ import qrcode
 def encode_qr_image(data: str) -> bytes:
     """Generate a PNG byte array of the QR code for given string data."""
     qr = qrcode.QRCode(
-        version=1,
+        version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_M,
         box_size=10,
         border=4,

@@ -70,7 +70,7 @@ class Account(Base):
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="accounts")
     access_logs: Mapped[List["AccessLog"]] = relationship(
-        "AccessLog", back_populates="account", cascade="all, delete-orphan"
+        "AccessLog", back_populates="account"
     )
 
 

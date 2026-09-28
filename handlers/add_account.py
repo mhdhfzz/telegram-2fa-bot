@@ -66,12 +66,17 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if context.user_data.get("add_state") != "awaiting_qr":
         return
 
-    photos = update.message.photo
-    if not photos:
+    photo_file = None
+    if update.message.photo:
+        highest_res_photo = update.message.photo[-1]
+        photo_file = await highest_res_photo.get_file()
+    elif update.message.document and update.message.document.mime_type:
+        if update.message.document.mime_type.startswith("image/"):
+            photo_file = await update.message.document.get_file()
+
+    if not photo_file:
         return
 
-    highest_res_photo = photos[-1]
-    photo_file = await highest_res_photo.get_file()
     photo_bytes = await photo_file.download_as_bytearray()
 
     decoded_uri = decode_qr_image(bytes(photo_bytes))
@@ -139,6 +144,17 @@ async def handle_manual_secret_input(update: Update, context: ContextTypes.DEFAU
             "❌ **Secret Key tidak valid!**\n\n"
             "Secret key Base32 hanya boleh berisi huruf A-Z dan angka 2-7 (tanpa spasi). "
             "Silakan ketik ulang Secret Key yang benar:"
+        )
+        return
+
+    import pyotp
+    try:
+        _ = pyotp.TOTP(cleaned_secret).now()
+    except Exception:
+        await update.message.reply_text(
+            "❌ **Secret Key tidak valid!**\n\n"
+            "Secret key tidak dapat didekode sebagai Base32 yang valid. "
+            "Silakan periksa dan ketik ulang Secret Key yang benar:"
         )
         return
 

@@ -130,3 +130,72 @@ async def test_delete_account_with_pin(session_factory, seed_user_and_accounts):
     async with session_factory() as session:
         acc = await session.get(Account, 2)
         assert acc is None
+
+
+@pytest.mark.asyncio
+async def test_edit_account_label(session_factory, seed_user_and_accounts):
+    from handlers.manage_account import handle_edit_label_prompt, handle_save_new_label
+
+    update = MagicMock()
+    update.effective_user.id = 101
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    # Step 1: Prompt edit label
+    await handle_edit_label_prompt(update, context, account_id=1)
+    assert context.user_data["manage_state"] == "awaiting_new_label"
+    assert context.user_data["edit_acc_id"] == 1
+
+    # Step 2: User sends new label
+    msg_update = MagicMock()
+    msg_update.effective_user.id = 101
+    msg_update.message.text = "GitHub Work"
+    msg_update.message.reply_text = AsyncMock()
+
+    await handle_save_new_label(msg_update, context)
+
+    # Verify label changed in DB
+    async with session_factory() as session:
+        acc = await session.get(Account, 1)
+        assert acc.label == "GitHub Work"
+
+
+@pytest.mark.asyncio
+async def test_search_accounts(session_factory, seed_user_and_accounts):
+    from handlers.menu import handle_search_account_prompt, handle_search_query_message
+
+    update = MagicMock()
+    update.effective_user.id = 101
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    # Step 1: Prompt
+    await handle_search_account_prompt(update, context)
+    assert context.user_data["menu_state"] == "awaiting_search_query"
+
+    # Step 2: Send matching search query
+    msg_update = MagicMock()
+    msg_update.effective_user.id = 101
+    msg_update.message.text = "git"
+    msg_update.message.reply_text = AsyncMock()
+
+    await handle_search_query_message(msg_update, context)
+
+    msg_update.message.reply_text.assert_called_once()
+    args, kwargs = msg_update.message.reply_text.call_args
+    assert "Hasil pencarian" in args[0]
+    kb = kwargs["reply_markup"].inline_keyboard
+    labels = [btn.text for row in kb for btn in row]
+    assert any("GitHub" in l for l in labels)

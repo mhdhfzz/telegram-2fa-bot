@@ -97,6 +97,7 @@ async def handle_show_account_detail(
     )
 
     keyboard = [
+        [InlineKeyboardButton("✏️ Ganti Label", callback_data=f"manage:edit_label:{account.id}")],
         [InlineKeyboardButton(fav_button_text, callback_data=f"manage:fav:{account.id}")],
         [InlineKeyboardButton("🗑️ Hapus Akun", callback_data=f"manage:del_prompt:{account.id}")],
         [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")],
@@ -105,6 +106,71 @@ async def handle_show_account_detail(
 
     if query:
         await query.edit_message_text(detail_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_edit_label_prompt(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, account_id: int
+) -> None:
+    """Prompt user to send new label for an account."""
+    query = update.callback_query
+    if query:
+        await query.answer()
+
+    context.user_data["manage_state"] = "awaiting_new_label"
+    context.user_data["edit_acc_id"] = account_id
+
+    text = (
+        "✏️ **Ganti Label Akun**\n\n"
+        "Ketik dan kirimkan nama label baru untuk akun ini:"
+    )
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Batal", callback_data=f"manage:detail:{account_id}")]
+    ])
+    if query:
+        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    elif update.message:
+        await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_save_new_label(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Save new label in DB and confirm to user."""
+    if context.user_data.get("manage_state") != "awaiting_new_label":
+        return
+
+    new_label = (update.message.text or "").strip()
+    account_id = context.user_data.pop("edit_acc_id", None)
+    context.user_data.pop("manage_state", None)
+
+    if not new_label or not account_id:
+        await update.message.reply_text("Label tidak boleh kosong. Perubahan dibatalkan.")
+        return
+
+    session_factory = context.bot_data.get("session_factory")
+    user_id = update.effective_user.id
+
+    if session_factory:
+        async with session_factory() as session:
+            stmt = select(User).where(User.telegram_user_id == user_id)
+            user = (await session.execute(stmt)).scalars().first()
+            if user:
+                acc_stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
+                account = (await session.execute(acc_stmt)).scalars().first()
+                if account:
+                    account.label = new_label
+                    await session.commit()
+                    await log_action(session, user.id, "manage_account", True, account_id=account.id)
+                    success_kb = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔍 Lihat Detail", callback_data=f"manage:detail:{account_id}")],
+                        [InlineKeyboardButton("🔙 Daftar Akun", callback_data="manage:list")],
+                    ])
+                    await update.message.reply_text(
+                        f"✅ Label berhasil diperbarui menjadi: **{new_label}**",
+                        reply_markup=success_kb,
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
+
+    await update.message.reply_text("❌ Gagal memperbarui label akun.")
 
 
 async def handle_toggle_favorite(
@@ -209,7 +275,7 @@ async def handle_delete_account_pin_keypad(
                     if account:
                         await session.delete(account)
                         await session.commit()
-                        await log_action(session, user.id, "delete_account", True, account_id=account_id)
+                        await log_action(session, user.id, "delete_account", True, account_id=None)
 
         clear_keypad_buffer(context.user_data, "del_pin")
         context.user_data.pop("del_acc_id", None)

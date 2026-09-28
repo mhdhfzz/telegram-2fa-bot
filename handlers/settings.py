@@ -237,7 +237,7 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                 "⏱️ *Pesan ini akan otomatis dihapus dalam 30 detik demi keamanan.*"
             )
             markup = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Selesai & Kembali", callback_data="menu:settings")]
+                [InlineKeyboardButton("✅ Saya Sudah Mencatat", callback_data="settings:confirm_phrase")]
             ])
             await query.edit_message_text(success_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
@@ -447,4 +447,184 @@ async def handle_view_logs_callback(update: Update, context: ContextTypes.DEFAUL
 
     markup = InlineKeyboardMarkup(keyboard)
     if query:
+        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_confirm_phrase_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Delete recovery phrase message and return to settings menu cleanly."""
+    query = update.callback_query
+    if query:
+        await query.answer()
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    await handle_settings_menu(update, context)
+
+
+async def handle_import_backup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Prompt user to upload a backup json file."""
+    query = update.callback_query
+    if query:
+        await query.answer()
+
+    context.user_data["settings_state"] = "awaiting_import_file"
+    text = (
+        "📥 **Impor Cadangan (Backup)**\n\n"
+        "Silakan kirimkan file cadangan (`.json`) yang sebelumnya Anda ekspor dari bot ini.\n\n"
+        "⚠️ *Pastikan Anda hanya mengimpor file backup dari sumber tepercaya.*"
+    )
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔙 Batal", callback_data="menu:settings")]
+    ])
+    if query:
+        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    elif update.message:
+        await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_import_file_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Receive uploaded backup document file."""
+    if context.user_data.get("settings_state") != "awaiting_import_file":
+        return
+
+    doc = update.message.document
+    if not doc:
+        return
+
+    file = await doc.get_file()
+    file_bytes = await file.download_as_bytearray()
+
+    context.user_data["import_file_bytes"] = bytes(file_bytes)
+    context.user_data["settings_state"] = "awaiting_import_passphrase"
+
+    text = (
+        "🔐 **Masukkan Passphrase Cadangan**\n\n"
+        "File backup diterima! Sekarang, ketik dan kirimkan **Passphrase** "
+        "yang Anda buat saat mengekspor file ini:"
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_import_passphrase_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Decrypt backup payload with provided passphrase and prompt PIN."""
+    if context.user_data.get("settings_state") != "awaiting_import_passphrase":
+        return
+
+    passphrase = (update.message.text or "").strip()
+    backup_bytes = context.user_data.get("import_file_bytes")
+
+    if not backup_bytes:
+        await update.message.reply_text("Sesi impor kedaluwarsa. Silakan ulangi dari Pengaturan.")
+        context.user_data.pop("settings_state", None)
+        return
+
+    try:
+        accounts_data = import_accounts_backup(backup_bytes, passphrase)
+    except Exception:
+        await update.message.reply_text(
+            "❌ **Passphrase salah atau file rusak!**\n\n"
+            "Gagal mendekripsi file cadangan. Silakan ketik ulang Passphrase yang benar:"
+        )
+        return
+
+    context.user_data["import_accounts_data"] = accounts_data
+    context.user_data.pop("import_file_bytes", None)
+    context.user_data.pop("settings_state", None)
+    clear_keypad_buffer(context.user_data, "import_pin")
+
+    text = (
+        f"✅ **File Berhasil Didekripsi!**\n\n"
+        f"Ditemukan **{len(accounts_data)} akun** dalam file cadangan.\n\n"
+        "Masukkan **PIN 6 digit** Anda untuk mengenkripsi dan menyimpan akun-akun ini ke database:\n\n"
+        f"`{render_pin_display(0)}`"
+    )
+    markup = build_keypad_keyboard("import_pin", show_cancel=True)
+    await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Process keypad entry to re-encrypt and save imported accounts."""
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data or ""
+    parts = data.split(":")
+    if len(parts) < 3:
+        return
+
+    key_val = parts[2]
+    buf, is_complete, is_cancel = handle_keypad_press(
+        context.user_data, "import_pin", key_val, max_length=6
+    )
+
+    if is_cancel:
+        clear_keypad_buffer(context.user_data, "import_pin")
+        context.user_data.pop("import_accounts_data", None)
+        await handle_settings_menu(update, context)
+        return
+
+    if is_complete:
+        accounts_data = context.user_data.get("import_accounts_data", [])
+        session_factory = context.bot_data.get("session_factory")
+        user_id = update.effective_user.id
+
+        if session_factory:
+            async with session_factory() as session:
+                user_stmt = select(User).where(User.telegram_user_id == user_id)
+                user = (await session.execute(user_stmt)).scalars().first()
+                if not user or not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+                    await record_failed_pin_attempt(session, user)
+                    await log_action(session, user.id, "import", False)
+                    clear_keypad_buffer(context.user_data, "import_pin")
+                    await query.edit_message_text(
+                        "❌ **PIN Salah!** Impor akun dibatalkan demi keamanan.",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                        ]),
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
+
+                await record_successful_pin_attempt(session, user)
+                key = derive_encryption_key(buf, user.kdf_salt)
+
+                for acc_item in accounts_data:
+                    ciph, nonce = encrypt_secret(key, acc_item["secret"])
+                    new_acc = Account(
+                        user_id=user.id,
+                        label=acc_item.get("label", "Akun"),
+                        issuer=acc_item.get("issuer"),
+                        secret_encrypted=ciph,
+                        nonce=nonce,
+                        type=acc_item.get("type", "totp"),
+                        digits=acc_item.get("digits", 6),
+                        period=acc_item.get("period", 30),
+                        hotp_counter=acc_item.get("counter", 0),
+                    )
+                    session.add(new_acc)
+
+                await session.commit()
+                await log_action(session, user.id, "import", True)
+
+        clear_keypad_buffer(context.user_data, "import_pin")
+        context.user_data.pop("import_accounts_data", None)
+
+        success_text = (
+            f"✅ **Impor Berhasil Selesai!**\n\n"
+            f"Sebanyak **{len(accounts_data)} akun** telah berhasil diimpor dan diamankan dengan PIN Anda."
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔑 Lihat Kode OTP", callback_data="menu:view_code")],
+            [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")],
+        ])
+        await query.edit_message_text(success_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    else:
+        accounts_data = context.user_data.get("import_accounts_data", [])
+        text = (
+            f"🔑 **Konfirmasi Impor ({len(accounts_data)} Akun)**\n\n"
+            "Masukkan PIN 6 digit Anda:\n\n"
+            f"`{render_pin_display(len(buf))}`"
+        )
+        markup = build_keypad_keyboard("import_pin", show_cancel=True)
         await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
