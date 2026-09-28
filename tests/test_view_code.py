@@ -274,3 +274,64 @@ async def test_view_code_auto_delete_job_restores_menu():
     assert call_kwargs["reply_markup"] is not None
 
 
+@pytest.mark.asyncio
+async def test_handle_refresh_code_hotp_increments_counter(session_factory, seed_user_and_totp_account):
+    import time
+    from db.models import Account
+    from handlers.view_code import handle_refresh_code
+    from sqlalchemy import select
+
+    seed_user, _ = seed_user_and_totp_account
+
+    # Create HOTP account in DB
+    async with session_factory() as session:
+        hotp_acc = Account(
+            user_id=seed_user.id,
+            label="Test HOTP",
+            issuer="Service",
+            secret_encrypted=b"dummy",
+            nonce=b"dummy",
+            type="hotp",
+            digits=6,
+            hotp_counter=3,
+        )
+        session.add(hotp_acc)
+        await session.commit()
+        await session.refresh(hotp_acc)
+        hotp_id = hotp_acc.id
+
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update = MagicMock()
+    update.callback_query = query
+    update.effective_user.id = seed_user.telegram_user_id
+
+    context = MagicMock()
+    context.bot_data = {"session_factory": session_factory}
+    context.user_data = {
+        "active_view": {
+            "account_id": hotp_id,
+            "secret": "JBSWY3DPEHPK3PXP",
+            "type": "hotp",
+            "digits": 6,
+            "label": "Test HOTP",
+            "emoji": "🔢",
+            "expires_at": time.time() + 90,
+        }
+    }
+
+    await handle_refresh_code(update, context, hotp_id)
+
+    query.edit_message_text.assert_called_once()
+    edited_text = query.edit_message_text.call_args[0][0]
+    assert "Counter #4" in edited_text
+    query.answer.assert_called_with("🔢 Kode HOTP berikutnya dibuat!")
+
+    # Check counter was updated in DB
+    async with session_factory() as session:
+        refreshed = (await session.execute(select(Account).where(Account.id == hotp_id))).scalars().first()
+        assert refreshed.hotp_counter == 4
+
+
+

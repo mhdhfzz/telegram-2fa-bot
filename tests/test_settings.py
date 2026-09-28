@@ -255,3 +255,44 @@ async def test_import_backup_flow(session_factory, seed_user_with_secret):
         key = derive_encryption_key("111222", db_user.kdf_salt)
         decrypted_secret = decrypt_secret(key, imported_acc.secret_encrypted, imported_acc.nonce)
         assert decrypted_secret == "JBSWY3DPEHPK3PXP"
+
+
+@pytest.mark.asyncio
+async def test_handle_confirm_phrase_settings_cancels_job_and_returns_to_settings(session_factory):
+    from handlers.settings import handle_confirm_phrase_settings
+
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.message.message_id = 888
+    query.message.delete = AsyncMock()
+    # Message was deleted so edit_message_text fails with Message to edit not found
+    query.edit_message_text = AsyncMock(side_effect=Exception("Message to edit not found"))
+
+    update = MagicMock()
+    update.callback_query = query
+    update.effective_chat.id = 6666
+    update.effective_user.id = 12345
+    update.message = None
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+    context.bot.send_message = AsyncMock()
+
+    job = MagicMock()
+    context.job_queue.get_jobs_by_name = MagicMock(
+        side_effect=lambda name: [job] if "auto_del_phrase_set" in name else []
+    )
+
+    await handle_confirm_phrase_settings(update, context)
+
+    query.answer.assert_called()
+    query.message.delete.assert_called_once()
+    job.schedule_removal.assert_called_once()
+
+    # Falls back to send_message because edit_message_text failed
+    context.bot.send_message.assert_called_once()
+    call_kwargs = context.bot.send_message.call_args[1]
+    assert call_kwargs["chat_id"] == 6666
+    assert "Pengaturan & Keamanan" in call_kwargs["text"]
+

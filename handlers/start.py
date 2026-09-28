@@ -202,11 +202,13 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
             )
 
             if context.job_queue and update.effective_chat:
+                job_name = f"auto_delete_phrase_{update.effective_chat.id}_{query.message.message_id}"
                 context.job_queue.run_once(
                     auto_delete_message_job,
                     when=auto_del_secs,
                     chat_id=update.effective_chat.id,
                     data=query.message.message_id,
+                    name=job_name,
                 )
         else:
             confirm_text = (
@@ -228,12 +230,16 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
 
 async def handle_confirm_phrase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    await query.answer()
-
-    try:
-        await query.message.delete()
-    except Exception:
-        pass
+    if query:
+        await query.answer()
+        if context.job_queue and update.effective_chat and query.message:
+            job_name = f"auto_delete_phrase_{update.effective_chat.id}_{query.message.message_id}"
+            for job in context.job_queue.get_jobs_by_name(job_name):
+                job.schedule_removal()
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
 
     from handlers.menu import show_main_menu
     await show_main_menu(update, context)

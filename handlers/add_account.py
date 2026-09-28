@@ -46,7 +46,11 @@ async def handle_add_account_menu(update: Update, context: ContextTypes.DEFAULT_
     markup = InlineKeyboardMarkup(keyboard)
 
     if query:
-        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
     elif update.message:
         await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
@@ -67,7 +71,11 @@ async def handle_choose_scan_qr(update: Update, context: ContextTypes.DEFAULT_TY
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Batal", callback_data="menu:back_to_main")]
     ])
-    await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    try:
+        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            pass
 
 
 async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -171,7 +179,11 @@ async def handle_choose_manual(update: Update, context: ContextTypes.DEFAULT_TYP
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Batal", callback_data="menu:back_to_main")]
     ])
-    await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    try:
+        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            pass
 
 
 async def handle_manual_secret_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

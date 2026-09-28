@@ -189,6 +189,30 @@ async def on_startup(app: Application) -> None:
         logger.info("Database initialized successfully.")
 
 
+async def on_shutdown(app: Application) -> None:
+    engine = app.bot_data.get("engine")
+    if engine:
+        await engine.dispose()
+        logger.info("Database engine disposed cleanly.")
+
+
+async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log errors caused by updates and ignore benign Telegram API exceptions."""
+    err = context.error
+    if not err:
+        return
+
+    err_str = str(err)
+    if "Message is not modified" in err_str:
+        return
+    if "Query is too old" in err_str:
+        return
+    if "Message to edit not found" in err_str:
+        return
+
+    logger.error("Unhandled exception while processing update:", exc_info=err)
+
+
 def create_application(
     bot_token: Optional[str] = None, db_path: Optional[str] = None
 ) -> Application:
@@ -199,7 +223,13 @@ def create_application(
     engine = get_async_engine(database_path)
     session_factory = get_session_factory(engine)
 
-    app = ApplicationBuilder().token(token).post_init(on_startup).build()
+    app = (
+        ApplicationBuilder()
+        .token(token)
+        .post_init(on_startup)
+        .post_shutdown(on_shutdown)
+        .build()
+    )
     app.bot_data["engine"] = engine
     app.bot_data["session_factory"] = session_factory
     app.bot_data["settings"] = settings
@@ -209,6 +239,7 @@ def create_application(
     app.add_handler(MessageHandler(filters.PHOTO, handle_qr_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, document_message_dispatcher))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_dispatcher))
+    app.add_error_handler(global_error_handler)
 
     return app
 

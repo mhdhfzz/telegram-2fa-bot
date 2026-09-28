@@ -87,7 +87,18 @@ async def handle_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     markup = InlineKeyboardMarkup(keyboard)
 
     if query:
-        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" in str(e):
+                pass
+            elif update.effective_chat:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
     elif update.message:
         await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
@@ -336,11 +347,13 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             await query.edit_message_text(success_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
             if context.job_queue and update.effective_chat:
+                job_name = f"auto_del_phrase_set_{update.effective_chat.id}_{query.message.message_id}"
                 context.job_queue.run_once(
                     auto_delete_phrase_job,
                     when=auto_del_secs,
                     chat_id=update.effective_chat.id,
                     data=query.message.message_id,
+                    name=job_name,
                 )
         else:
             text = (
@@ -636,6 +649,10 @@ async def handle_confirm_phrase_settings(update: Update, context: ContextTypes.D
     query = update.callback_query
     if query:
         await query.answer()
+        if context.job_queue and update.effective_chat and query.message:
+            job_name = f"auto_del_phrase_set_{update.effective_chat.id}_{query.message.message_id}"
+            for job in context.job_queue.get_jobs_by_name(job_name):
+                job.schedule_removal()
         try:
             await query.message.delete()
         except Exception:
@@ -659,7 +676,11 @@ async def handle_import_backup_start(update: Update, context: ContextTypes.DEFAU
         [InlineKeyboardButton("🔙 Batal", callback_data="menu:settings")]
     ])
     if query:
-        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
         if query.message:
             context.user_data["prompt_msg_id"] = query.message.message_id
     elif update.message:
@@ -849,16 +870,29 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
 
                 for acc_item in accounts_data:
                     ciph, nonce = encrypt_secret(key, acc_item["secret"])
+                    clean_label = " ".join((acc_item.get("label") or "Akun").split())[:64] or "Akun"
+                    clean_issuer = " ".join(acc_item["issuer"].split())[:64] if acc_item.get("issuer") else None
+                    acc_type = "hotp" if acc_item.get("type") == "hotp" else "totp"
+                    digits = 8 if acc_item.get("digits") == 8 else 6
+                    try:
+                        period = max(5, int(acc_item.get("period", 30)))
+                    except Exception:
+                        period = 30
+                    try:
+                        counter = max(0, int(acc_item.get("counter", 0)))
+                    except Exception:
+                        counter = 0
+
                     new_acc = Account(
                         user_id=user.id,
-                        label=acc_item.get("label", "Akun"),
-                        issuer=acc_item.get("issuer"),
+                        label=clean_label,
+                        issuer=clean_issuer,
                         secret_encrypted=ciph,
                         nonce=nonce,
-                        type=acc_item.get("type", "totp"),
-                        digits=acc_item.get("digits", 6),
-                        period=acc_item.get("period", 30),
-                        hotp_counter=acc_item.get("counter", 0),
+                        type=acc_type,
+                        digits=digits,
+                        period=period,
+                        hotp_counter=counter,
                     )
                     session.add(new_acc)
 

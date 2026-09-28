@@ -160,13 +160,17 @@ async def handle_refresh_code(
             user_id = update.effective_user.id
             if session_factory:
                 async with session_factory() as session:
-                    stmt = select(Account).where(Account.id == account_id, Account.user_id == user_id)
-                    acc = (await session.execute(stmt)).scalars().first()
-                    if acc:
-                        code = generate_hotp_code(secret, acc.hotp_counter, digits=digits)
-                        acc.hotp_counter += 1
-                        await session.commit()
-                        code_html = format_otp_display(code)
+                    user_stmt = select(User).where(User.telegram_user_id == user_id)
+                    user = (await session.execute(user_stmt)).scalars().first()
+                    if user:
+                        stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
+                        acc = (await session.execute(stmt)).scalars().first()
+                        if acc:
+                            code = generate_hotp_code(secret, acc.hotp_counter, digits=digits)
+                            acc.hotp_counter += 1
+                            await session.commit()
+                            await log_action(session, user.id, "view_otp", True, account_id=acc.id)
+                            code_html = format_otp_display(code)
                         msg_text = (
                             f"{emoji} <b>{safe_label}</b> (Counter #{acc.hotp_counter})\n\n"
                             f"{code_html}\n\n"
@@ -276,7 +280,8 @@ async def handle_view_code_menu(
                 accounts = list((await session.execute(acc_stmt)).scalars().all())
 
     buttons = []
-    for acc in accounts:
+    display_accounts = accounts[:25]
+    for acc in display_accounts:
         emoji = get_issuer_emoji(acc.issuer)
         fav = " ⭐" if acc.is_favorite else ""
         text = f"{emoji} {acc.label}{fav}"
@@ -288,17 +293,23 @@ async def handle_view_code_menu(
     buttons.append([InlineKeyboardButton("🔙 Kembali ke Menu Utama", callback_data="menu:back_to_main")])
     markup = InlineKeyboardMarkup(buttons)
 
+    limit_note = "\n\n_(Menampilkan 25 akun pertama. Gunakan menu Cari Akun jika akun Anda belum terlihat)_" if len(accounts) > 25 else ""
+
     if favorites_only:
-        msg_text = "⭐ **Akun Favorit**\n\nPilih akun untuk melihat kode autentikasi:"
+        msg_text = f"⭐ **Akun Favorit**\n\nPilih akun untuk melihat kode autentikasi:{limit_note}"
         if not accounts:
             msg_text = "⭐ **Akun Favorit**\n\nBelum ada akun favorit. Anda dapat menambahkan tanda bintang pada menu *✏️ Kelola Akun*."
     else:
-        msg_text = "🔑 **Lihat Kode OTP**\n\nPilih akun untuk melihat kode autentikasi:"
+        msg_text = f"🔑 **Lihat Kode OTP**\n\nPilih akun untuk melihat kode autentikasi:{limit_note}"
         if not accounts:
             msg_text = "🔑 **Lihat Kode OTP**\n\nBelum ada akun tersimpan. Gunakan menu *➕ Tambah Akun* terlebih dahulu."
 
     if query:
-        await query.edit_message_text(msg_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(msg_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
     elif update.message:
         await update.message.reply_text(msg_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 

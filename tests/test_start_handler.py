@@ -172,3 +172,44 @@ async def test_start_new_user_prompts_and_completes_4_digit_pin(session_factory)
         user = res.scalars().first()
         assert user is not None
         assert user.telegram_user_id == user_id
+
+
+@pytest.mark.asyncio
+async def test_handle_confirm_phrase_cancels_job_and_shows_menu(session_factory):
+    from handlers.start import handle_confirm_phrase
+
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.message.message_id = 999
+    query.message.delete = AsyncMock()
+    # When edit_message_text is called on a deleted message, it would raise BadRequest
+    query.edit_message_text = AsyncMock(side_effect=Exception("Message to edit not found"))
+
+    update = MagicMock()
+    update.callback_query = query
+    update.effective_chat.id = 5555
+    update.effective_user.id = 12345
+    update.message = None
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+    context.bot.send_message = AsyncMock()
+
+    scheduled_job = MagicMock()
+    context.job_queue.get_jobs_by_name = MagicMock(
+        side_effect=lambda name: [scheduled_job] if "auto_delete_phrase" in name else []
+    )
+
+    await handle_confirm_phrase(update, context)
+
+    query.answer.assert_called()
+    query.message.delete.assert_called_once()
+    scheduled_job.schedule_removal.assert_called_once()
+
+    # show_main_menu should have fallen back to send_message because edit_message_text failed
+    context.bot.send_message.assert_called_once()
+    call_kwargs = context.bot.send_message.call_args[1]
+    assert call_kwargs["chat_id"] == 5555
+    assert "Telegram 2FA Authenticator" in call_kwargs["text"]
+

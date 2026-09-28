@@ -98,8 +98,15 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 parse_mode=ParseMode.MARKDOWN,
             )
         except Exception as e:
-            if "Message is not modified" not in str(e):
+            if "Message is not modified" in str(e):
                 pass
+            elif update.effective_chat:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=text,
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
     elif update.message:
         await update.message.reply_text(
             text,
@@ -123,7 +130,11 @@ async def handle_search_account_prompt(update: Update, context: ContextTypes.DEF
         [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
     ])
     if query:
-        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
         if query.message:
             context.user_data["prompt_msg_id"] = query.message.message_id
     elif update.message:

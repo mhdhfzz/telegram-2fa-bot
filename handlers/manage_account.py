@@ -45,7 +45,8 @@ async def handle_list_accounts_to_manage(update: Update, context: ContextTypes.D
                 accounts = list((await session.execute(acc_stmt)).scalars().all())
 
     buttons = []
-    for acc in accounts:
+    display_accounts = accounts[:25]
+    for acc in display_accounts:
         emoji = get_issuer_emoji(acc.issuer)
         fav = " ⭐" if acc.is_favorite else ""
         text = f"{emoji} {acc.label}{fav}"
@@ -54,12 +55,17 @@ async def handle_list_accounts_to_manage(update: Update, context: ContextTypes.D
     buttons.append([InlineKeyboardButton("🔙 Kembali ke Menu Utama", callback_data="menu:back_to_main")])
     markup = InlineKeyboardMarkup(buttons)
 
-    msg_text = "✏️ **Kelola Akun**\n\nPilih akun yang ingin Anda edit, ubah status favorit, atau hapus:"
+    limit_note = "\n\n_(Menampilkan 25 akun pertama. Gunakan menu Cari Akun jika akun Anda belum terlihat)_" if len(accounts) > 25 else ""
+    msg_text = f"✏️ **Kelola Akun**\n\nPilih akun yang ingin Anda edit, ubah status favorit, atau hapus:{limit_note}"
     if not accounts:
         msg_text = "✏️ **Kelola Akun**\n\nBelum ada akun tersimpan. Gunakan menu *➕ Tambah Akun* untuk menambahkan."
 
     if query:
-        await query.edit_message_text(msg_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(msg_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
     elif update.message:
         await update.message.reply_text(msg_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
@@ -121,7 +127,11 @@ async def handle_show_account_detail(
     markup = InlineKeyboardMarkup(keyboard)
 
     if query:
-        await query.edit_message_text(detail_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(detail_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
 
 
 async def handle_edit_label_prompt(
@@ -143,7 +153,11 @@ async def handle_edit_label_prompt(
         [InlineKeyboardButton("❌ Batal", callback_data=f"manage:detail:{account_id}")]
     ])
     if query:
-        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
         if query.message:
             context.user_data["prompt_msg_id"] = query.message.message_id
     elif update.message:
@@ -276,7 +290,11 @@ async def handle_delete_prompt(
         f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("del_pin", show_cancel=True)
-    await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    try:
+        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            pass
 
 
 async def handle_delete_account_pin_keypad(
