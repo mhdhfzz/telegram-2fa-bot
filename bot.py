@@ -56,6 +56,7 @@ from handlers.start import (
     handle_start_command,
 )
 from handlers.view_code import (
+    handle_refresh_code,
     handle_select_account_for_code,
     handle_view_code_menu,
     handle_view_code_pin_keypad,
@@ -102,6 +103,9 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("view:select:"):
         acc_id = int(data.split(":")[2])
         await handle_select_account_for_code(update, context, acc_id)
+    elif data.startswith("view:refresh:"):
+        acc_id = int(data.split(":")[2])
+        await handle_refresh_code(update, context, acc_id)
     elif data.startswith("view_pin:"):
         await handle_view_code_pin_keypad(update, context)
     elif data == "manage:list":

@@ -154,3 +154,94 @@ async def test_view_code_html_escaping_and_countdown_job(session_factory):
     assert "&lt;User &amp; Team&gt;" in edited_text
     assert "<User & Team>" not in edited_text
     assert "<code>123456</code>" in edited_text
+
+
+@pytest.mark.asyncio
+async def test_view_code_countdown_job_generates_dynamic_otp():
+    from handlers.view_code import view_code_countdown_job
+
+    job = MagicMock()
+    job.data = {
+        "chat_id": 999,
+        "message_id": 888,
+        "secret": "JBSWY3DPEHPK3PXP",
+        "period": 30,
+        "digits": 6,
+        "label": "Google",
+        "emoji": "🔍",
+        "account_id": 1,
+    }
+    job.schedule_removal = MagicMock()
+
+    context = MagicMock()
+    context.job = job
+    context.bot.edit_message_text = AsyncMock()
+
+    await view_code_countdown_job(context)
+
+    context.bot.edit_message_text.assert_called_once()
+    call_kwargs = context.bot.edit_message_text.call_args[1]
+    edited_text = call_kwargs["text"]
+    reply_markup = call_kwargs["reply_markup"]
+
+    # Verify code was dynamically generated and wrapped in code tag
+    assert "<code>" in edited_text
+    assert "</code>" in edited_text
+    # Verify Refresh button routes to view:refresh:1
+    refresh_button = reply_markup.inline_keyboard[0][0]
+    assert refresh_button.callback_data == "view:refresh:1"
+
+
+@pytest.mark.asyncio
+async def test_handle_refresh_code_active_session():
+    import time
+    from handlers.view_code import handle_refresh_code
+
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update = MagicMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {
+        "active_view": {
+            "account_id": 1,
+            "secret": "JBSWY3DPEHPK3PXP",
+            "type": "totp",
+            "period": 30,
+            "digits": 6,
+            "label": "GitHub",
+            "emoji": "🐙",
+            "expires_at": time.time() + 90,
+        }
+    }
+
+    await handle_refresh_code(update, context, 1)
+
+    # Should update the message directly without asking for PIN
+    query.edit_message_text.assert_called_once()
+    edited_text = query.edit_message_text.call_args[0][0]
+    assert "<code>" in edited_text
+    assert "🐙" in edited_text
+    assert "GitHub" in edited_text
+    query.answer.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_cancel_view_code_jobs():
+    from handlers.view_code import cancel_view_code_jobs
+
+    countdown_job = MagicMock()
+    autodel_job = MagicMock()
+
+    context = MagicMock()
+    context.job_queue.get_jobs_by_name = MagicMock(
+        side_effect=lambda name: [countdown_job] if "countdown" in name else [autodel_job]
+    )
+
+    cancel_view_code_jobs(context, 123, 456)
+
+    countdown_job.schedule_removal.assert_called_once()
+    autodel_job.schedule_removal.assert_called_once()
+

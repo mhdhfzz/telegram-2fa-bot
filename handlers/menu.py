@@ -34,6 +34,12 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await query.answer()
         except Exception:
             pass
+
+        if query.message and update.effective_chat:
+            from handlers.view_code import cancel_view_code_jobs
+            cancel_view_code_jobs(context, update.effective_chat.id, query.message.message_id)
+            context.user_data.pop("active_view", None)
+
         await query.edit_message_text(
             text,
             reply_markup=keyboard,

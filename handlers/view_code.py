@@ -31,6 +31,16 @@ from services.otp_service import (
 )
 
 
+def cancel_view_code_jobs(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int) -> None:
+    """Cancel any active countdown or auto-delete jobs associated with a message."""
+    if not context.job_queue:
+        return
+    for name in [f"countdown_{chat_id}_{message_id}", f"autodel_{chat_id}_{message_id}"]:
+        jobs = context.job_queue.get_jobs_by_name(name)
+        for job in jobs:
+            job.schedule_removal()
+
+
 async def view_code_auto_delete_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Delete OTP message after configured lifetime."""
     try:
@@ -43,15 +53,16 @@ async def view_code_auto_delete_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def view_code_countdown_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Edit message every 5 seconds to update TOTP progress bar until expiration."""
+    """Edit message every 5 seconds to update TOTP progress bar and regenerate code until expiration."""
     job = context.job
     data = job.data or {}
     chat_id = data.get("chat_id")
     message_id = data.get("message_id")
     period = data.get("period", 30)
+    digits = data.get("digits", 6)
+    secret = data.get("secret")
     label = data.get("label", "")
     emoji = data.get("emoji", "🔐")
-    code_html = data.get("code_html", "")
     acc_id = data.get("account_id")
 
     settings = context.bot_data.get("settings")
@@ -63,6 +74,14 @@ async def view_code_countdown_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     remaining_sec = get_totp_remaining_seconds(interval=period)
     countdown_bar = render_countdown_bar(remaining_sec, total_period=period)
+
+    # Automatically generate the latest OTP code for the current second
+    if secret:
+        current_code = generate_totp_code(secret, digits=digits, interval=period)
+        code_html = format_otp_display(current_code)
+    else:
+        code_html = data.get("code_html", "")
+
     safe_label = html.escape(label)
     new_text = (
         f"{emoji} <b>{safe_label}</b>\n\n"
@@ -72,7 +91,7 @@ async def view_code_countdown_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         f"⏱️ <i>Pesan ini akan otomatis dihapus dalam {auto_del_secs} detik.</i>"
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Refresh Kode", callback_data=f"view:select:{acc_id}")],
+        [InlineKeyboardButton("🔄 Refresh Kode", callback_data=f"view:refresh:{acc_id}")],
         [InlineKeyboardButton("🔙 Daftar Akun", callback_data="menu:view_code")],
     ])
 
@@ -84,8 +103,101 @@ async def view_code_countdown_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_markup=kb,
             parse_mode=ParseMode.HTML,
         )
-    except Exception:
+    except Exception as e:
+        if "Message is not modified" in str(e):
+            return
         job.schedule_removal()
+
+
+async def handle_refresh_code(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, account_id: int
+) -> None:
+    """Manually refresh OTP code without re-entering PIN if session is still active."""
+    query = update.callback_query
+    if not query:
+        return
+
+    active_view = context.user_data.get("active_view")
+    # Verify active view is valid, for this account, and not expired
+    if (
+        active_view
+        and active_view.get("account_id") == account_id
+        and time.time() < active_view.get("expires_at", 0)
+    ):
+        secret = active_view["secret"]
+        acc_type = active_view.get("type", "totp")
+        period = active_view.get("period", 30)
+        digits = active_view.get("digits", 6)
+        label = active_view.get("label", "")
+        emoji = active_view.get("emoji", "🔐")
+        safe_label = html.escape(label)
+        settings = context.bot_data.get("settings")
+        auto_del_secs = getattr(settings, "auto_delete_seconds", 90) if settings else 90
+
+        if acc_type == "hotp":
+            session_factory = context.bot_data.get("session_factory")
+            user_id = update.effective_user.id
+            if session_factory:
+                async with session_factory() as session:
+                    stmt = select(Account).where(Account.id == account_id, Account.user_id == user_id)
+                    acc = (await session.execute(stmt)).scalars().first()
+                    if acc:
+                        code = generate_hotp_code(secret, acc.hotp_counter, digits=digits)
+                        acc.hotp_counter += 1
+                        await session.commit()
+                        code_html = format_otp_display(code)
+                        msg_text = (
+                            f"{emoji} <b>{safe_label}</b> (Counter #{acc.hotp_counter})\n\n"
+                            f"{code_html}\n\n"
+                            "Tap kode di atas untuk menyalin ke clipboard.\n\n"
+                            f"⏱️ <i>Pesan ini akan otomatis dihapus dalam {auto_del_secs} detik.</i>"
+                        )
+                        kb = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔢 Generate Kode Berikutnya", callback_data=f"view:refresh:{account_id}")],
+                            [InlineKeyboardButton("🔙 Daftar Akun", callback_data="menu:view_code")],
+                        ])
+                        try:
+                            await query.edit_message_text(msg_text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                            await query.answer("🔢 Kode HOTP berikutnya dibuat!")
+                        except Exception as e:
+                            if "Message is not modified" in str(e):
+                                await query.answer()
+                        return
+        else:
+            # TOTP
+            code = generate_totp_code(secret, digits=digits, interval=period)
+            remaining_sec = get_totp_remaining_seconds(interval=period)
+            countdown_bar = render_countdown_bar(remaining_sec, total_period=period)
+            code_html = format_otp_display(code)
+            msg_text = (
+                f"{emoji} <b>{safe_label}</b>\n\n"
+                f"{code_html}\n\n"
+                f"{countdown_bar}\n\n"
+                "Tap kode di atas untuk menyalin ke clipboard.\n\n"
+                f"⏱️ <i>Pesan ini akan otomatis dihapus dalam {auto_del_secs} detik.</i>"
+            )
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Refresh Kode", callback_data=f"view:refresh:{account_id}")],
+                [InlineKeyboardButton("🔙 Daftar Akun", callback_data="menu:view_code")],
+            ])
+            try:
+                await query.edit_message_text(msg_text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                await query.answer("🔄 Kode OTP diperbarui!")
+            except Exception as e:
+                if "Message is not modified" in str(e):
+                    await query.answer("🔄 Kode masih sama (periode belum berganti).")
+                else:
+                    await query.answer()
+            return
+
+    # If session expired or missing, cancel any lingering jobs and prompt for PIN
+    await query.answer("⏱️ Sesi telah berakhir. Masukkan PIN kembali.", show_alert=False)
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    msg_id = query.message.message_id if query.message else None
+    if chat_id and msg_id:
+        cancel_view_code_jobs(context, chat_id, msg_id)
+    context.user_data.pop("active_view", None)
+    await handle_select_account_for_code(update, context, account_id)
 
 
 async def handle_view_code_menu(
@@ -97,6 +209,9 @@ async def handle_view_code_menu(
         await query.answer()
         if query.data == "menu:favorite_accounts":
             favorites_only = True
+        if query.message and update.effective_chat:
+            cancel_view_code_jobs(context, update.effective_chat.id, query.message.message_id)
+            context.user_data.pop("active_view", None)
 
     session_factory = context.bot_data.get("session_factory")
     user_id = update.effective_user.id
@@ -174,6 +289,9 @@ async def handle_select_account_for_code(
     query = update.callback_query
     if query:
         await query.answer()
+        if query.message and update.effective_chat:
+            cancel_view_code_jobs(context, update.effective_chat.id, query.message.message_id)
+            context.user_data.pop("active_view", None)
 
     context.user_data["view_account_id"] = account_id
     clear_keypad_buffer(context.user_data, "view_pin")
@@ -314,7 +432,7 @@ async def handle_view_code_pin_keypad(
                     f"⏱️ <i>Pesan ini akan otomatis dihapus dalam {auto_del_secs} detik.</i>"
                 )
                 kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔢 Generate Kode Berikutnya", callback_data=f"view:select:{account.id}")],
+                    [InlineKeyboardButton("🔢 Generate Kode Berikutnya", callback_data=f"view:refresh:{account.id}")],
                     [InlineKeyboardButton("🔙 Daftar Akun", callback_data="menu:view_code")],
                 ])
             else:
@@ -333,7 +451,7 @@ async def handle_view_code_pin_keypad(
                     f"⏱️ <i>Pesan ini akan otomatis dihapus dalam {auto_del_secs} detik.</i>"
                 )
                 kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔄 Refresh Kode", callback_data=f"view:select:{account.id}")],
+                    [InlineKeyboardButton("🔄 Refresh Kode", callback_data=f"view:refresh:{account.id}")],
                     [InlineKeyboardButton("🔙 Daftar Akun", callback_data="menu:view_code")],
                 ])
 
@@ -345,17 +463,37 @@ async def handle_view_code_pin_keypad(
 
             # Schedule auto-deletion and repeating countdown updater
             if context.job_queue and update.effective_chat:
+                chat_id = update.effective_chat.id
+                msg_id = query.message.message_id
+                cancel_view_code_jobs(context, chat_id, msg_id)
+
+                context.user_data["active_view"] = {
+                    "account_id": account.id,
+                    "secret": secret,
+                    "type": account.type,
+                    "period": account.period,
+                    "digits": account.digits,
+                    "label": account.label,
+                    "emoji": emoji,
+                    "expires_at": time.time() + auto_del_secs,
+                    "chat_id": chat_id,
+                    "message_id": msg_id,
+                }
+
                 context.job_queue.run_once(
                     view_code_auto_delete_job,
                     when=auto_del_secs,
-                    chat_id=update.effective_chat.id,
-                    data=query.message.message_id,
+                    chat_id=chat_id,
+                    data=msg_id,
+                    name=f"autodel_{chat_id}_{msg_id}",
                 )
                 if account.type == "totp":
                     job_data = {
-                        "chat_id": update.effective_chat.id,
-                        "message_id": query.message.message_id,
+                        "chat_id": chat_id,
+                        "message_id": msg_id,
+                        "secret": secret,
                         "period": account.period,
+                        "digits": account.digits,
                         "label": account.label,
                         "emoji": emoji,
                         "code_html": code_html,
@@ -367,8 +505,10 @@ async def handle_view_code_pin_keypad(
                         interval=5,
                         first=5,
                         data=job_data,
-                        chat_id=update.effective_chat.id,
+                        chat_id=chat_id,
+                        name=f"countdown_{chat_id}_{msg_id}",
                     )
+
     else:
         text = (
             "🔑 **Buka Kode Akun**\n\n"
