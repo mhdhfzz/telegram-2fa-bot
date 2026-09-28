@@ -1,4 +1,5 @@
 import html
+import time
 from typing import Optional
 from sqlalchemy import select
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -30,7 +31,7 @@ from services.otp_service import (
 
 
 async def view_code_auto_delete_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Delete OTP message after 30 seconds lifetime."""
+    """Delete OTP message after configured lifetime."""
     try:
         chat_id = context.job.chat_id
         message_id = context.job.data
@@ -52,11 +53,14 @@ async def view_code_countdown_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     code_html = data.get("code_html", "")
     acc_id = data.get("account_id")
 
-    remaining_sec = get_totp_remaining_seconds(interval=period)
-    if remaining_sec <= 2:
+    settings = context.bot_data.get("settings")
+    auto_del_secs = getattr(settings, "auto_delete_seconds", 90) if settings else 90
+
+    if "expires_at" in data and time.time() >= data["expires_at"]:
         job.schedule_removal()
         return
 
+    remaining_sec = get_totp_remaining_seconds(interval=period)
     countdown_bar = render_countdown_bar(remaining_sec, total_period=period)
     safe_label = html.escape(label)
     new_text = (
@@ -64,7 +68,7 @@ async def view_code_countdown_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{code_html}\n\n"
         f"{countdown_bar}\n\n"
         "Tap kode di atas untuk menyalin ke clipboard.\n\n"
-        "⏱️ <i>Pesan ini akan otomatis dihapus dalam 30 detik.</i>"
+        f"⏱️ <i>Pesan ini akan otomatis dihapus dalam {auto_del_secs} detik.</i>"
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Refresh Kode", callback_data=f"view:select:{acc_id}")],
@@ -290,6 +294,8 @@ async def handle_view_code_pin_keypad(
 
             emoji = get_issuer_emoji(account.issuer)
             safe_label = html.escape(account.label)
+            settings = context.bot_data.get("settings")
+            auto_del_secs = getattr(settings, "auto_delete_seconds", 90) if settings else 90
 
             if account.type == "hotp":
                 code = generate_hotp_code(secret, account.hotp_counter, digits=account.digits)
@@ -302,7 +308,7 @@ async def handle_view_code_pin_keypad(
                     f"{emoji} <b>{safe_label}</b> (Counter #{account.hotp_counter})\n\n"
                     f"{code_html}\n\n"
                     "Tap kode di atas untuk menyalin ke clipboard.\n\n"
-                    "⏱️ <i>Pesan ini akan otomatis dihapus dalam 30 detik.</i>"
+                    f"⏱️ <i>Pesan ini akan otomatis dihapus dalam {auto_del_secs} detik.</i>"
                 )
                 kb = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔢 Generate Kode Berikutnya", callback_data=f"view:select:{account.id}")],
@@ -321,7 +327,7 @@ async def handle_view_code_pin_keypad(
                     f"{code_html}\n\n"
                     f"{countdown_bar}\n\n"
                     "Tap kode di atas untuk menyalin ke clipboard.\n\n"
-                    "⏱️ <i>Pesan ini akan otomatis dihapus dalam 30 detik.</i>"
+                    f"⏱️ <i>Pesan ini akan otomatis dihapus dalam {auto_del_secs} detik.</i>"
                 )
                 kb = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔄 Refresh Kode", callback_data=f"view:select:{account.id}")],
@@ -338,7 +344,7 @@ async def handle_view_code_pin_keypad(
             if context.job_queue and update.effective_chat:
                 context.job_queue.run_once(
                     view_code_auto_delete_job,
-                    when=30,
+                    when=auto_del_secs,
                     chat_id=update.effective_chat.id,
                     data=query.message.message_id,
                 )
@@ -351,6 +357,7 @@ async def handle_view_code_pin_keypad(
                         "emoji": emoji,
                         "code_html": code_html,
                         "account_id": account.id,
+                        "expires_at": time.time() + auto_del_secs,
                     }
                     context.job_queue.run_repeating(
                         view_code_countdown_job,

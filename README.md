@@ -22,7 +22,7 @@ Seluruh navigasi berbasis **inline button** dan **inline numeric keypad**, sehin
 - 🔢 **Inline Numeric Keypad**: Input PIN dilakukan melalui grid tombol inline interaktif (`0-9`, `⌫`, `✅`, `❌`) dengan display tersamar (`PIN: • • • • _ _`).
 - 📋 **Tap-to-Copy Monospace OTP**: Kode OTP diformat dalam tag monospace tanpa spasi (`<code>123456</code>`), memudahkan pengguna menyalin kode cukup dengan satu sentuhan.
 - ⏳ **Visual Countdown Bar**: Dilengkapi progres bar visual sisa waktu kode TOTP (`⏳ [■■■■■■□□□□] 18 detik lagi`) yang di-update secara berkala.
-- ⏱️ **Auto-Delete Pesan Sensitif**: Pesan berisi kode OTP, recovery phrase, atau dokumen cadangan dihapus otomatis setelah 30 detik via job queue.
+- ⏱️ **Auto-Delete Pesan Sensitif**: Pesan berisi kode OTP, recovery phrase, atau dokumen cadangan dihapus otomatis setelah 90 detik via job queue.
 - 🚫 **Exponential Lockout**: Mencegah serangan brute-force PIN (salah 5x berturut-turut mengunci akun selama 5 menit; berlanjut ke 15 menit, lalu maksimum 60 menit).
 - 📷 **Scan QR Code & Input Manual**: Tambah akun dengan mengirim foto/tangkapan layar QR code (`otpauth://`) atau memasukkan Secret Key Base32 secara manual.
 - 🗂️ **Cadangan Terenkripsi (Export/Import)**: Cadangkan seluruh akun ke file JSON yang dienkripsi menggunakan passphrase mandiri (terpisah dari PIN login).

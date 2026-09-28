@@ -229,12 +229,15 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             context.user_data.pop("ch_pin_step", None)
 
             phrase_str = " ".join(phrase)
+            settings = context.bot_data.get("settings")
+            auto_del_secs = getattr(settings, "auto_delete_seconds", 90) if settings else 90
+
             success_text = (
                 "✅ **PIN Berhasil Diubah!**\n\n"
                 "Seluruh data akun telah dienkripsi ulang dengan kunci baru Anda.\n\n"
                 "⚠️ **Recovery Phrase Baru Anda:**\n"
                 f"`{phrase_str}`\n\n"
-                "⏱️ *Pesan ini akan otomatis dihapus dalam 30 detik demi keamanan.*"
+                f"⏱️ *Pesan ini akan otomatis dihapus dalam {auto_del_secs} detik demi keamanan.*"
             )
             markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("✅ Saya Sudah Mencatat", callback_data="settings:confirm_phrase")]
@@ -244,7 +247,7 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             if context.job_queue and update.effective_chat:
                 context.job_queue.run_once(
                     auto_delete_phrase_job,
-                    when=30,
+                    when=auto_del_secs,
                     chat_id=update.effective_chat.id,
                     data=query.message.message_id,
                 )

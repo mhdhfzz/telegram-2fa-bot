@@ -198,6 +198,7 @@ def create_application(
     app = ApplicationBuilder().token(token).post_init(on_startup).build()
     app.bot_data["engine"] = engine
     app.bot_data["session_factory"] = session_factory
+    app.bot_data["settings"] = settings
 
     app.add_handler(CommandHandler("start", handle_start_command))
     app.add_handler(CallbackQueryHandler(callback_router))

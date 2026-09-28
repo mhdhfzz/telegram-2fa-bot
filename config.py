@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     db_path: str = "2fa_bot.db"
     log_level: str = "INFO"
     pin_length: int = 6
+    auto_delete_seconds: int = 90
 
     model_config = SettingsConfigDict(
         env_file=".env",
