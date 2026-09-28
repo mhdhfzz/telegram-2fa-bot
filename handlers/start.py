@@ -121,11 +121,15 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
                 f"`{render_pin_display(len(buf), max_length=pin_len)}`"
             )
             kb = build_keypad_keyboard("setup_pin", show_cancel=False)
-            await query.edit_message_text(
-                text,
-                reply_markup=kb,
-                parse_mode=ParseMode.MARKDOWN,
-            )
+            try:
+                await query.edit_message_text(
+                    text,
+                    reply_markup=kb,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception as e:
+                if "Message is not modified" not in str(e):
+                    pass
 
     elif prefix == "setup_confirm":
         buf2, is_complete2, _ = handle_keypad_press(
@@ -210,11 +214,15 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
                 f"`{render_pin_display(len(buf2), max_length=pin_len)}`"
             )
             confirm_kb = build_keypad_keyboard("setup_confirm", show_cancel=False)
-            await query.edit_message_text(
-                confirm_text,
-                reply_markup=confirm_kb,
-                parse_mode=ParseMode.MARKDOWN,
-            )
+            try:
+                await query.edit_message_text(
+                    confirm_text,
+                    reply_markup=confirm_kb,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception as e:
+                if "Message is not modified" not in str(e):
+                    pass
 
 
 

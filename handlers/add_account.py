@@ -15,7 +15,11 @@ from handlers.keypad import (
     render_pin_display,
 )
 from services.icon_service import get_issuer_emoji
-from services.lockout_service import record_failed_pin_attempt, record_successful_pin_attempt
+from services.lockout_service import (
+    check_lockout,
+    record_failed_pin_attempt,
+    record_successful_pin_attempt,
+)
 from services.log_service import log_action
 from services.otp_service import clean_base32_secret, parse_otpauth_uri
 from services.qr_service import decode_qr_image
@@ -116,7 +120,17 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         parsed = parse_otpauth_uri(decoded_uri)
     except Exception as exc:
-        await update.effective_chat.send_message(f"❌ Format URI OTP tidak valid: {str(exc)}")
+        context.user_data.pop("add_state", None)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📷 Coba Scan Lagi", callback_data="add_acc:scan_qr")],
+            [InlineKeyboardButton("⌨️ Input Manual", callback_data="add_acc:manual")],
+            [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")],
+        ])
+        await update.effective_chat.send_message(
+            f"❌ Format URI OTP tidak valid: {str(exc)}",
+            reply_markup=kb,
+            parse_mode=ParseMode.MARKDOWN,
+        )
         return
 
     context.user_data["pending_account"] = parsed
@@ -346,15 +360,33 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
                     await query.edit_message_text("❌ Pengguna tidak terdaftar.")
                     return
 
+                is_locked, remaining_seconds = check_lockout(user)
+                if is_locked:
+                    mins, secs = divmod(remaining_seconds, 60)
+                    clear_keypad_buffer(context.user_data, "add_acc_pin")
+                    context.user_data.pop("pending_account", None)
+                    context.user_data.pop("add_state", None)
+                    await query.edit_message_text(
+                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                        ]),
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
+
                 if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
-                    await record_failed_pin_attempt(session, user)
+                    locked_now, rem = await record_failed_pin_attempt(session, user)
                     await log_action(session, user.id, "add_account", False)
                     clear_keypad_buffer(context.user_data, "add_acc_pin")
 
-                    fail_text = (
-                        "❌ **PIN Salah!**\n\n"
-                        "Penyimpanan akun dibatalkan demi keamanan."
-                    )
+                    if locked_now:
+                        mins, secs = divmod(rem, 60)
+                        fail_text = f"🔒 **Akun Terkunci!** Terlalu banyak percobaan PIN salah. Coba lagi dalam {mins}m {secs}s."
+                    else:
+                        attempts_left = max(0, 5 - user.failed_pin_attempts)
+                        fail_text = f"❌ **PIN Salah!** Sisa percobaan sebelum terkunci: {attempts_left} kali."
+
                     kb = InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
                     ])
@@ -406,4 +438,8 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
             f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("add_acc_pin", show_cancel=True)
-        await query.edit_message_text(prompt_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(prompt_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass

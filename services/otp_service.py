@@ -83,9 +83,26 @@ def parse_otpauth_uri(uri: str) -> dict:
     if not label:
         label = issuer or "Akun Baru"
 
-    digits = int(query_params.get("digits", [6])[0])
-    period = int(query_params.get("period", [30])[0])
-    counter = int(query_params.get("counter", [0])[0])
+    try:
+        digits = int(query_params.get("digits", [6])[0])
+        if digits not in (6, 8):
+            digits = 6
+    except (ValueError, TypeError):
+        digits = 6
+
+    try:
+        period = int(query_params.get("period", [30])[0])
+        if period <= 0:
+            period = 30
+    except (ValueError, TypeError):
+        period = 30
+
+    try:
+        counter = int(query_params.get("counter", [0])[0])
+        if counter < 0:
+            counter = 0
+    except (ValueError, TypeError):
+        counter = 0
 
     return {
         "secret": secret,

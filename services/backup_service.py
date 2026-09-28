@@ -38,6 +38,12 @@ def import_accounts_backup(backup_bytes: bytes, export_passphrase: str) -> List[
         accounts_data = json.loads(decrypted_json)
         if not isinstance(accounts_data, list):
             raise ValueError("Corrupted payload structure")
-        return accounts_data
+        valid_accounts = [
+            item for item in accounts_data
+            if isinstance(item, dict) and item.get("secret")
+        ]
+        if not valid_accounts:
+            raise ValueError("Corrupted payload structure: no valid accounts found")
+        return valid_accounts
     except Exception as exc:
         raise ValueError("Invalid passphrase or corrupted backup") from exc

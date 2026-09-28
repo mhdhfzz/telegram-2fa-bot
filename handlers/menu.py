@@ -21,12 +21,56 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
+def clear_user_workflow_state(user_data: dict) -> None:
+    """Clear all pending interactive workflow states and buffers from user_data."""
+    if not isinstance(user_data, dict):
+        return
+    keys_to_clear = [
+        "add_state",
+        "manual_secret",
+        "pending_account",
+        "manage_state",
+        "edit_acc_id",
+        "del_acc_id",
+        "menu_state",
+        "settings_state",
+        "export_auth_pin",
+        "import_file_bytes",
+        "import_accounts_data",
+        "prompt_msg_id",
+        "view_account_id",
+        "active_view",
+        "verified_old_pin",
+        "temp_new_pin",
+        "ch_pin_step",
+    ]
+    for key in keys_to_clear:
+        user_data.pop(key, None)
+
+    keypad_prefixes = [
+        "setup_pin_1",
+        "setup_pin_2",
+        "add_acc_pin",
+        "view_pin",
+        "del_pin",
+        "ch_pin_old",
+        "ch_pin_new1",
+        "ch_pin_new2",
+        "export_pin",
+        "import_pin",
+    ]
+    from handlers.keypad import clear_keypad_buffer
+    for prefix in keypad_prefixes:
+        clear_keypad_buffer(user_data, prefix)
+
+
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
         "🔐 **Telegram 2FA Authenticator**\n\n"
         "Pilih menu di bawah ini untuk melihat kode OTP atau mengelola akun Anda:"
     )
     keyboard = get_main_menu_keyboard()
+    clear_user_workflow_state(context.user_data)
 
     if update.callback_query:
         query = update.callback_query
@@ -38,13 +82,16 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if query.message and update.effective_chat:
             from handlers.view_code import cancel_view_code_jobs
             cancel_view_code_jobs(context, update.effective_chat.id, query.message.message_id)
-            context.user_data.pop("active_view", None)
 
-        await query.edit_message_text(
-            text,
-            reply_markup=keyboard,
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=keyboard,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
     elif update.message:
         await update.message.reply_text(
             text,

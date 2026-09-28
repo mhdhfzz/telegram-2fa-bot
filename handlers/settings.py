@@ -17,7 +17,11 @@ from handlers.keypad import (
     render_pin_display,
 )
 from services.backup_service import export_accounts_backup, import_accounts_backup
-from services.lockout_service import record_failed_pin_attempt, record_successful_pin_attempt
+from services.lockout_service import (
+    check_lockout,
+    record_failed_pin_attempt,
+    record_successful_pin_attempt,
+)
 from services.log_service import get_user_logs, log_action
 
 
@@ -53,6 +57,20 @@ async def handle_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     if query:
         await query.answer()
 
+    # Clear any pending settings workflows
+    context.user_data.pop("settings_state", None)
+    context.user_data.pop("export_auth_pin", None)
+    context.user_data.pop("import_file_bytes", None)
+    context.user_data.pop("import_accounts_data", None)
+    context.user_data.pop("ch_pin_step", None)
+    context.user_data.pop("verified_old_pin", None)
+    context.user_data.pop("temp_new_pin", None)
+    clear_keypad_buffer(context.user_data, "ch_pin_old")
+    clear_keypad_buffer(context.user_data, "ch_pin_new1")
+    clear_keypad_buffer(context.user_data, "ch_pin_new2")
+    clear_keypad_buffer(context.user_data, "export_pin")
+    clear_keypad_buffer(context.user_data, "import_pin")
+
     text = (
         "⚙️ **Pengaturan & Keamanan**\n\n"
         "Kelola PIN autentikasi, cadangkan atau pulihkan data akun, dan periksa riwayat akses Anda:"
@@ -77,6 +95,25 @@ async def handle_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_change_pin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+
+    session_factory = context.bot_data.get("session_factory")
+    user_id = update.effective_user.id
+    if session_factory:
+        async with session_factory() as session:
+            stmt = select(User).where(User.telegram_user_id == user_id)
+            user = (await session.execute(stmt)).scalars().first()
+            if user:
+                is_locked, remaining_seconds = check_lockout(user)
+                if is_locked:
+                    mins, secs = divmod(remaining_seconds, 60)
+                    await query.edit_message_text(
+                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                        ]),
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
 
     context.user_data["ch_pin_step"] = "old"
     clear_keypad_buffer(context.user_data, "ch_pin_old")
@@ -120,18 +157,44 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                 async with session_factory() as session:
                     stmt = select(User).where(User.telegram_user_id == user_id)
                     user = (await session.execute(stmt)).scalars().first()
-                    if not user or not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
-                        await record_failed_pin_attempt(session, user)
-                        await log_action(session, user.id, "pin_change", False)
+                    if not user:
+                        return
+
+                    is_locked, remaining_seconds = check_lockout(user)
+                    if is_locked:
+                        mins, secs = divmod(remaining_seconds, 60)
                         clear_keypad_buffer(context.user_data, "ch_pin_old")
                         await query.edit_message_text(
-                            "❌ **PIN Lama Salah!** Proses ganti PIN dibatalkan.",
+                            f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
                             reply_markup=InlineKeyboardMarkup([
                                 [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
                             ]),
                             parse_mode=ParseMode.MARKDOWN,
                         )
                         return
+
+                    if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+                        locked_now, rem = await record_failed_pin_attempt(session, user)
+                        await log_action(session, user.id, "pin_change", False)
+                        clear_keypad_buffer(context.user_data, "ch_pin_old")
+
+                        if locked_now:
+                            mins, secs = divmod(rem, 60)
+                            fail_text = f"🔒 **Akun Terkunci!** Terlalu banyak percobaan PIN salah. Coba lagi dalam {mins}m {secs}s."
+                        else:
+                            attempts_left = max(0, 5 - user.failed_pin_attempts)
+                            fail_text = f"❌ **PIN Lama Salah!** Sisa percobaan: {attempts_left} kali."
+
+                        await query.edit_message_text(
+                            fail_text,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                            ]),
+                            parse_mode=ParseMode.MARKDOWN,
+                        )
+                        return
+
+                    await record_successful_pin_attempt(session, user)
 
             context.user_data["verified_old_pin"] = buf
             context.user_data["ch_pin_step"] = "new1"
@@ -151,7 +214,11 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                 f"`{render_pin_display(len(buf), max_length=pin_len)}`"
             )
             markup = build_keypad_keyboard("ch_pin_old", show_cancel=True)
-            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            try:
+                await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            except Exception as e:
+                if "Message is not modified" not in str(e):
+                    pass
 
     elif prefix == "ch_pin_new1":
         buf, is_complete, is_cancel = handle_keypad_press(
@@ -180,7 +247,11 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                 f"`{render_pin_display(len(buf), max_length=pin_len)}`"
             )
             markup = build_keypad_keyboard("ch_pin_new1", show_cancel=True)
-            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            try:
+                await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            except Exception as e:
+                if "Message is not modified" not in str(e):
+                    pass
 
     elif prefix == "ch_pin_new2":
         buf, is_complete, is_cancel = handle_keypad_press(
@@ -278,12 +349,35 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                 f"`{render_pin_display(len(buf), max_length=pin_len)}`"
             )
             markup = build_keypad_keyboard("ch_pin_new2", show_cancel=True)
-            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            try:
+                await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            except Exception as e:
+                if "Message is not modified" not in str(e):
+                    pass
 
 
 async def handle_export_backup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+
+    session_factory = context.bot_data.get("session_factory")
+    user_id = update.effective_user.id
+    if session_factory:
+        async with session_factory() as session:
+            stmt = select(User).where(User.telegram_user_id == user_id)
+            user = (await session.execute(stmt)).scalars().first()
+            if user:
+                is_locked, remaining_seconds = check_lockout(user)
+                if is_locked:
+                    mins, secs = divmod(remaining_seconds, 60)
+                    await query.edit_message_text(
+                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                        ]),
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
 
     clear_keypad_buffer(context.user_data, "export_pin")
     pin_len = get_pin_length(context)
@@ -324,18 +418,44 @@ async def handle_export_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             async with session_factory() as session:
                 stmt = select(User).where(User.telegram_user_id == user_id)
                 user = (await session.execute(stmt)).scalars().first()
-                if not user or not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
-                    await record_failed_pin_attempt(session, user)
-                    await log_action(session, user.id, "export", False)
+                if not user:
+                    return
+
+                is_locked, remaining_seconds = check_lockout(user)
+                if is_locked:
+                    mins, secs = divmod(remaining_seconds, 60)
                     clear_keypad_buffer(context.user_data, "export_pin")
                     await query.edit_message_text(
-                        "❌ **PIN Salah!** Ekspor cadangan dibatalkan.",
+                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
                         ]),
                         parse_mode=ParseMode.MARKDOWN,
                     )
                     return
+
+                if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+                    locked_now, rem = await record_failed_pin_attempt(session, user)
+                    await log_action(session, user.id, "export", False)
+                    clear_keypad_buffer(context.user_data, "export_pin")
+
+                    if locked_now:
+                        mins, secs = divmod(rem, 60)
+                        fail_text = f"🔒 **Akun Terkunci!** Terlalu banyak percobaan PIN salah. Coba lagi dalam {mins}m {secs}s."
+                    else:
+                        attempts_left = max(0, 5 - user.failed_pin_attempts)
+                        fail_text = f"❌ **PIN Salah!** Sisa percobaan: {attempts_left} kali."
+
+                    await query.edit_message_text(
+                        fail_text,
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                        ]),
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
+
+                await record_successful_pin_attempt(session, user)
 
                 context.user_data["export_auth_pin"] = buf
                 context.user_data["settings_state"] = "awaiting_export_passphrase"
@@ -356,7 +476,11 @@ async def handle_export_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("export_pin", show_cancel=True)
-        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
 
 
 async def handle_export_passphrase_message(
@@ -678,12 +802,37 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             async with session_factory() as session:
                 user_stmt = select(User).where(User.telegram_user_id == user_id)
                 user = (await session.execute(user_stmt)).scalars().first()
-                if not user or not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
-                    await record_failed_pin_attempt(session, user)
+                if not user:
+                    return
+
+                is_locked, remaining_seconds = check_lockout(user)
+                if is_locked:
+                    mins, secs = divmod(remaining_seconds, 60)
+                    clear_keypad_buffer(context.user_data, "import_pin")
+                    context.user_data.pop("import_accounts_data", None)
+                    await query.edit_message_text(
+                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                        ]),
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
+
+                if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+                    locked_now, rem = await record_failed_pin_attempt(session, user)
                     await log_action(session, user.id, "import", False)
                     clear_keypad_buffer(context.user_data, "import_pin")
+
+                    if locked_now:
+                        mins, secs = divmod(rem, 60)
+                        fail_text = f"🔒 **Akun Terkunci!** Terlalu banyak percobaan PIN salah. Coba lagi dalam {mins}m {secs}s."
+                    else:
+                        attempts_left = max(0, 5 - user.failed_pin_attempts)
+                        fail_text = f"❌ **PIN Salah!** Sisa percobaan: {attempts_left} kali."
+
                     await query.edit_message_text(
-                        "❌ **PIN Salah!** Impor akun dibatalkan demi keamanan.",
+                        fail_text,
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
                         ]),
@@ -732,4 +881,8 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("import_pin", show_cancel=True)
-        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass

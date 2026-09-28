@@ -14,7 +14,11 @@ from handlers.keypad import (
     render_pin_display,
 )
 from services.icon_service import get_issuer_emoji
-from services.lockout_service import record_failed_pin_attempt, record_successful_pin_attempt
+from services.lockout_service import (
+    check_lockout,
+    record_failed_pin_attempt,
+    record_successful_pin_attempt,
+)
 from services.log_service import log_action
 
 
@@ -79,6 +83,12 @@ async def handle_show_account_detail(
             if user:
                 acc_stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
                 account = (await session.execute(acc_stmt)).scalars().first()
+
+    context.user_data.pop("manage_state", None)
+    context.user_data.pop("edit_acc_id", None)
+    context.user_data.pop("del_acc_id", None)
+    context.user_data.pop("prompt_msg_id", None)
+    clear_keypad_buffer(context.user_data, "del_pin")
 
     if not account:
         if query:
@@ -225,6 +235,25 @@ async def handle_delete_prompt(
     query = update.callback_query
     await query.answer()
 
+    session_factory = context.bot_data.get("session_factory")
+    user_id = update.effective_user.id
+    if session_factory:
+        async with session_factory() as session:
+            stmt = select(User).where(User.telegram_user_id == user_id)
+            user = (await session.execute(stmt)).scalars().first()
+            if user:
+                is_locked, remaining_seconds = check_lockout(user)
+                if is_locked:
+                    mins, secs = divmod(remaining_seconds, 60)
+                    await query.edit_message_text(
+                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
+                        ]),
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
+
     context.user_data["del_acc_id"] = account_id
     clear_keypad_buffer(context.user_data, "del_pin")
 
@@ -276,13 +305,33 @@ async def handle_delete_account_pin_keypad(
                 user_stmt = select(User).where(User.telegram_user_id == user_id)
                 user = (await session.execute(user_stmt)).scalars().first()
                 if user:
+                    is_locked, remaining_seconds = check_lockout(user)
+                    if is_locked:
+                        mins, secs = divmod(remaining_seconds, 60)
+                        clear_keypad_buffer(context.user_data, "del_pin")
+                        context.user_data.pop("del_acc_id", None)
+                        await query.edit_message_text(
+                            f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
+                            ]),
+                            parse_mode=ParseMode.MARKDOWN,
+                        )
+                        return
+
                     if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
-                        await record_failed_pin_attempt(session, user)
+                        locked_now, rem = await record_failed_pin_attempt(session, user)
                         await log_action(session, user.id, "delete_account", False, account_id=account_id)
                         clear_keypad_buffer(context.user_data, "del_pin")
                         context.user_data.pop("del_acc_id", None)
 
-                        fail_text = "❌ **PIN Salah!**\nPenghapusan akun dibatalkan demi keamanan."
+                        if locked_now:
+                            mins, secs = divmod(rem, 60)
+                            fail_text = f"🔒 **Akun Terkunci!** Terlalu banyak percobaan PIN salah. Coba lagi dalam {mins}m {secs}s."
+                        else:
+                            attempts_left = max(0, 5 - user.failed_pin_attempts)
+                            fail_text = f"❌ **PIN Salah!** Sisa percobaan sebelum terkunci: {attempts_left} kali."
+
                         fail_kb = InlineKeyboardMarkup([
                             [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
                         ])
@@ -313,4 +362,8 @@ async def handle_delete_account_pin_keypad(
             f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("del_pin", show_cancel=True)
-        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass

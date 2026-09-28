@@ -53,3 +53,13 @@ def test_import_tampered_payload():
 
     with pytest.raises(ValueError, match="Invalid passphrase or corrupted backup"):
         import_accounts_backup(bytes(tampered_bytes), "correct_passphrase")
+
+
+def test_import_invalid_payload_structure():
+    # Payload with no secrets or empty dicts
+    accounts_data = [{"label": "NoSecret", "type": "totp"}]
+    backup_bytes = export_accounts_backup(accounts_data, "valid_passphrase")
+
+    with pytest.raises(ValueError, match="Invalid passphrase or corrupted backup"):
+        import_accounts_backup(backup_bytes, "valid_passphrase")
+

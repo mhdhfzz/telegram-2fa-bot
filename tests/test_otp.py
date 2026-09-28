@@ -78,3 +78,13 @@ def test_qr_encode_and_decode():
     assert len(png_bytes) > 0
     decoded = decode_qr_image(png_bytes)
     assert decoded == data
+
+
+def test_parse_otpauth_uri_sanitization():
+    # Test zero or negative period, invalid digits, negative counter
+    uri_malformed = "otpauth://totp/Test:User?secret=JBSWY3DPEHPK3PXP&period=0&digits=15&counter=-3"
+    parsed = parse_otpauth_uri(uri_malformed)
+    assert parsed["period"] == 30  # Sanitized to 30 to prevent ZeroDivisionError
+    assert parsed["digits"] == 6   # Sanitized to 6
+    assert parsed["counter"] == 0  # Sanitized to 0
+
