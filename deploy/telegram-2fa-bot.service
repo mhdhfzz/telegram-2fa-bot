@@ -1,0 +1,23 @@
+[Unit]
+Description=Telegram 2FA Authenticator Bot Service
+After=network.target
+
+[Service]
+Type=simple
+User=bot2fa
+Group=bot2fa
+WorkingDirectory=/opt/telegram-2fa-bot
+EnvironmentFile=/opt/telegram-2fa-bot/.env
+ExecStart=/opt/telegram-2fa-bot/venv/bin/python /opt/telegram-2fa-bot/bot.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/telegram-2fa-bot
+
+[Install]
+WantedBy=multi-user.target

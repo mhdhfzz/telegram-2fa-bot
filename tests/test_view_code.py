@@ -1,0 +1,125 @@
+from unittest.mock import AsyncMock, MagicMock
+import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from crypto.cipher import encrypt_secret
+from crypto.kdf import derive_encryption_key, generate_salt, hash_pin
+from db.models import Account, User
+from db.session import init_db
+from handlers.view_code import (
+    handle_select_account_for_code,
+    handle_view_code_menu,
+    handle_view_code_pin_keypad,
+)
+
+
+@pytest_asyncio.fixture
+async def session_factory():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    await init_db(engine)
+    factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    yield factory
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def seed_user_and_totp_account(session_factory):
+    async with session_factory() as session:
+        pin = "112233"
+        pin_salt = generate_salt()
+        kdf_salt = generate_salt()
+        pin_hash = hash_pin(pin, pin_salt)
+
+        user = User(
+            telegram_user_id=303,
+            pin_hash=pin_hash,
+            pin_hash_salt=pin_salt,
+            kdf_salt=kdf_salt,
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+
+        # Encrypt secret 'JBSWY3DPEHPK3PXP'
+        key = derive_encryption_key(pin, kdf_salt)
+        ciphertext, nonce = encrypt_secret(key, "JBSWY3DPEHPK3PXP")
+
+        acc = Account(
+            user_id=user.id,
+            label="GitHub Test",
+            issuer="GitHub",
+            secret_encrypted=ciphertext,
+            nonce=nonce,
+            type="totp",
+            digits=6,
+            period=30,
+        )
+        session.add(acc)
+        await session.commit()
+        await session.refresh(acc)
+        return user, acc
+
+
+@pytest.mark.asyncio
+async def test_view_code_menu_lists_accounts(session_factory, seed_user_and_totp_account):
+    user, acc = seed_user_and_totp_account
+    update = MagicMock()
+    update.effective_user.id = user.telegram_user_id
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    await handle_view_code_menu(update, context)
+
+    query.edit_message_text.assert_called_once()
+    args, kwargs = query.edit_message_text.call_args
+    assert "Lihat Kode OTP" in args[0]
+    kb = kwargs["reply_markup"].inline_keyboard
+    texts = [btn.text for row in kb for btn in row]
+    assert any("GitHub Test" in t for t in texts)
+
+
+@pytest.mark.asyncio
+async def test_view_code_correct_pin_displays_monospace_otp(
+    session_factory, seed_user_and_totp_account
+):
+    user, acc = seed_user_and_totp_account
+    update = MagicMock()
+    update.effective_user.id = user.telegram_user_id
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {"view_account_id": acc.id}
+    context.bot_data = {"session_factory": session_factory}
+    context.job_queue.run_once = MagicMock()
+    context.job_queue.run_repeating = MagicMock()
+
+    # Enter correct PIN '112233'
+    for digit in "112233":
+        query.data = f"view_pin:key:{digit}"
+        await handle_view_code_pin_keypad(update, context)
+
+    # Monospace OTP code without space inside <code>...</code>
+    last_text = query.edit_message_text.call_args[0][0]
+    assert "<code>" in last_text
+    assert "</code>" in last_text
+
+    # Extract code between tags
+    start = last_text.find("<code>") + 6
+    end = last_text.find("</code>")
+    otp_code = last_text[start:end]
+    assert len(otp_code) == 6
+    assert otp_code.isdigit()
+    assert " " not in otp_code
+
+    # Progress bar and auto-delete job
+    assert "⏳" in last_text
+    context.job_queue.run_once.assert_called_once()
