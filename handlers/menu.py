@@ -70,6 +70,14 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "Pilih menu di bawah ini untuk melihat kode OTP atau mengelola akun Anda:"
     )
     keyboard = get_main_menu_keyboard()
+
+    active_view = context.user_data.get("active_view")
+    if active_view and isinstance(active_view, dict) and update.effective_chat:
+        mid = active_view.get("message_id")
+        if mid:
+            from handlers.view_code import cancel_view_code_jobs
+            cancel_view_code_jobs(context, update.effective_chat.id, mid)
+
     clear_user_workflow_state(context.user_data)
 
     if update.callback_query:
@@ -174,8 +182,11 @@ async def handle_search_query_message(update: Update, context: ContextTypes.DEFA
                 )
                 accounts = list((await session.execute(acc_stmt)).scalars().all())
 
+    from telegram.helpers import escape_markdown
+    safe_query = escape_markdown(search_query, version=1)
+
     if not accounts:
-        text = f"🔍 Hasil pencarian untuk '`{search_query}`':\n\n❌ Tidak ada akun yang cocok."
+        text = f"🔍 Hasil pencarian untuk '`{safe_query}`':\n\n❌ Tidak ada akun yang cocok."
         markup = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔍 Cari Lagi", callback_data="menu:search_account")],
             [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")],
@@ -184,7 +195,8 @@ async def handle_search_query_message(update: Update, context: ContextTypes.DEFA
         return
 
     buttons = []
-    for acc in accounts:
+    display_accounts = accounts[:20]
+    for acc in display_accounts:
         emoji = get_issuer_emoji(acc.issuer)
         fav = " ⭐" if acc.is_favorite else ""
         buttons.append([InlineKeyboardButton(f"{emoji} {acc.label}{fav}", callback_data=f"view:select:{acc.id}")])
@@ -192,5 +204,9 @@ async def handle_search_query_message(update: Update, context: ContextTypes.DEFA
     buttons.append([InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")])
     markup = InlineKeyboardMarkup(buttons)
 
-    text = f"🔍 Hasil pencarian untuk '`{search_query}`' ({len(accounts)} akun):\nPilih akun untuk melihat kode OTP:"
+    limit_note = "\n_(Menampilkan 20 hasil teratas)_" if len(accounts) > 20 else ""
+    text = (
+        f"🔍 Hasil pencarian untuk '`{safe_query}`' ({len(accounts)} akun):{limit_note}\n"
+        "Pilih akun untuk melihat kode OTP:"
+    )
     await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)

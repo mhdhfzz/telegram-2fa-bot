@@ -624,7 +624,11 @@ async def handle_view_logs_callback(update: Update, context: ContextTypes.DEFAUL
 
     markup = InlineKeyboardMarkup(keyboard)
     if query:
-        await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                pass
 
 
 async def handle_confirm_phrase_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -24,6 +24,12 @@ def get_async_engine(db_path: str = "2fa_bot.db") -> AsyncEngine:
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        if db_path != ":memory:":
+            try:
+                cursor.execute("PRAGMA journal_mode=WAL")
+            except Exception:
+                pass
         cursor.close()
 
     return engine

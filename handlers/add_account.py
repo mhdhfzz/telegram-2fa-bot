@@ -137,12 +137,16 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data["add_state"] = "awaiting_pin"
     clear_keypad_buffer(context.user_data, "add_acc_pin")
 
+    from telegram.helpers import escape_markdown
+
     emoji = get_issuer_emoji(parsed.get("issuer"))
     pin_len = get_pin_length(context)
+    safe_label = escape_markdown(parsed["label"], version=1)
+    safe_issuer = escape_markdown(parsed.get("issuer"), version=1) if parsed.get("issuer") else "-"
     prompt_text = (
         f"📷 **QR Code Berhasil Terdeteksi!**\n\n"
-        f"{emoji} **Akun**: {parsed['label']}\n"
-        f"• **Issuer**: {parsed.get('issuer') or '-'}\n"
+        f"{emoji} **Akun**: {safe_label}\n"
+        f"• **Issuer**: {safe_issuer}\n"
         f"• **Tipe**: {parsed['type'].upper()}\n\n"
         f"Masukkan **PIN {pin_len} digit** Anda untuk mengenkripsi dan menyimpan akun ini:\n\n"
         f"`{render_pin_display(0, max_length=pin_len)}`"
@@ -252,9 +256,14 @@ async def handle_manual_label_input(update: Update, context: ContextTypes.DEFAUL
     if context.user_data.get("add_state") != "awaiting_manual_label":
         return
 
-    label = (update.message.text or "").strip()
-    if not label:
-        sent_err = await update.message.reply_text("Silakan masukkan nama label yang tidak kosong:")
+    label = " ".join((update.message.text or "").split())
+    if not label or len(label) > 64:
+        err_msg = (
+            "❌ **Label terlalu panjang!** Maksimal 64 karakter. Silakan ketik ulang:"
+            if len(label) > 64
+            else "Silakan masukkan nama label yang tidak kosong:"
+        )
+        sent_err = await update.message.reply_text(err_msg, parse_mode=ParseMode.MARKDOWN)
         try:
             await update.message.delete()
         except Exception:
@@ -291,12 +300,16 @@ async def handle_manual_label_input(update: Update, context: ContextTypes.DEFAUL
     context.user_data["add_state"] = "awaiting_pin"
     clear_keypad_buffer(context.user_data, "add_acc_pin")
 
+    from telegram.helpers import escape_markdown
+
     emoji = get_issuer_emoji(issuer)
     pin_len = get_pin_length(context)
+    safe_label = escape_markdown(label, version=1)
+    safe_issuer = escape_markdown(issuer, version=1) if issuer else "-"
     prompt_text = (
         f"📝 **Konfirmasi Akun Baru**\n\n"
-        f"{emoji} **Akun**: {label}\n"
-        f"• **Issuer**: {issuer or '-'}\n"
+        f"{emoji} **Akun**: {safe_label}\n"
+        f"• **Issuer**: {safe_issuer}\n"
         f"• **Tipe**: TOTP (30s)\n\n"
         f"Masukkan **PIN {pin_len} digit** Anda untuk mengenkripsi dan menyimpan akun ini:\n\n"
         f"`{render_pin_display(0, max_length=pin_len)}`"
@@ -419,10 +432,13 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
         context.user_data.pop("add_state", None)
         context.user_data.pop("manual_secret", None)
 
+        from telegram.helpers import escape_markdown
+
         emoji = get_issuer_emoji(pending.get("issuer"))
+        safe_label = escape_markdown(pending["label"], version=1)
         success_text = (
             f"✅ **Akun Berhasil Ditambahkan!**\n\n"
-            f"{emoji} **{pending['label']}** telah dienkripsi dengan standar AES-256-GCM "
+            f"{emoji} **{safe_label}** telah dienkripsi dengan standar AES-256-GCM "
             f"dan tersimpan dengan aman."
         )
         success_kb = InlineKeyboardMarkup([
@@ -431,10 +447,13 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
         ])
         await query.edit_message_text(success_text, reply_markup=success_kb, parse_mode=ParseMode.MARKDOWN)
     else:
+        from telegram.helpers import escape_markdown
+
         pending = context.user_data.get("pending_account", {})
         label = pending.get("label", "Akun Baru")
+        safe_label = escape_markdown(label, version=1)
         prompt_text = (
-            f"Masukkan **PIN {pin_len} digit** Anda untuk mengenkripsi dan menyimpan **{label}**:\n\n"
+            f"Masukkan **PIN {pin_len} digit** Anda untuk mengenkripsi dan menyimpan **{safe_label}**:\n\n"
             f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("add_acc_pin", show_cancel=True)

@@ -204,3 +204,46 @@ async def test_search_accounts(session_factory, seed_user_and_accounts):
     kb = kwargs["reply_markup"].inline_keyboard
     labels = [btn.text for row in kb for btn in row]
     assert any("GitHub" in l for l in labels)
+
+
+@pytest.mark.asyncio
+async def test_search_accounts_with_markdown_special_characters(session_factory, seed_user_and_accounts):
+    from handlers.menu import handle_search_query_message
+
+    context = MagicMock()
+    context.user_data = {"menu_state": "awaiting_search_query"}
+    context.bot_data = {"session_factory": session_factory}
+
+    msg_update = MagicMock()
+    msg_update.effective_user.id = 101
+    msg_update.message.text = "test_user*query[1]"
+    msg_update.message.reply_text = AsyncMock()
+    msg_update.message.delete = AsyncMock()
+
+    await handle_search_query_message(msg_update, context)
+    msg_update.message.reply_text.assert_called_once()
+    args, _ = msg_update.message.reply_text.call_args
+    # Verify escaped string is used (v1 escapes _, *, `, [)
+    assert "test\\_user\\*query\\[1]" in args[0]
+
+
+@pytest.mark.asyncio
+async def test_edit_account_label_validation(session_factory, seed_user_and_accounts):
+    from handlers.manage_account import handle_save_new_label
+
+    context = MagicMock()
+    context.user_data = {"manage_state": "awaiting_new_label", "edit_acc_id": 1}
+    context.bot_data = {"session_factory": session_factory}
+
+    # Label exceeding 64 chars
+    msg_update = MagicMock()
+    msg_update.effective_user.id = 101
+    msg_update.message.text = "A" * 70
+    msg_update.message.reply_text = AsyncMock()
+    msg_update.message.delete = AsyncMock()
+
+    await handle_save_new_label(msg_update, context)
+    msg_update.message.reply_text.assert_called_once()
+    args, _ = msg_update.message.reply_text.call_args
+    assert "terlalu panjang" in args[0]
+

@@ -95,13 +95,18 @@ async def handle_show_account_detail(
             await query.edit_message_text("❌ Akun tidak ditemukan.")
         return
 
+    from telegram.helpers import escape_markdown
+
     emoji = get_issuer_emoji(account.issuer)
     fav_status = "⭐ Ya" if account.is_favorite else "Tidak"
     fav_button_text = "☆ Hapus dari Favorit" if account.is_favorite else "⭐ Jadikan Favorit"
 
+    safe_label = escape_markdown(account.label, version=1)
+    safe_issuer = escape_markdown(account.issuer, version=1) if account.issuer else '-'
+
     detail_text = (
-        f"{emoji} **Detail Akun: {account.label}**\n\n"
-        f"• **Issuer**: {account.issuer or '-'}\n"
+        f"{emoji} **Detail Akun: {safe_label}**\n\n"
+        f"• **Issuer**: {safe_issuer}\n"
         f"• **Tipe**: {account.type.upper()}\n"
         f"• **Digits**: {account.digits}\n"
         f"• **Favorit**: {fav_status}\n"
@@ -170,8 +175,13 @@ async def handle_save_new_label(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception:
             pass
 
+    new_label = " ".join(new_label.split())
     if not new_label or not account_id:
         await update.message.reply_text("Label tidak boleh kosong. Perubahan dibatalkan.")
+        return
+
+    if len(new_label) > 64:
+        await update.message.reply_text("❌ Label terlalu panjang (maksimal 64 karakter). Perubahan dibatalkan.")
         return
 
     session_factory = context.bot_data.get("session_factory")
@@ -188,12 +198,14 @@ async def handle_save_new_label(update: Update, context: ContextTypes.DEFAULT_TY
                     account.label = new_label
                     await session.commit()
                     await log_action(session, user.id, "manage_account", True, account_id=account.id)
+                    from telegram.helpers import escape_markdown
+                    safe_new_label = escape_markdown(new_label, version=1)
                     success_kb = InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔍 Lihat Detail", callback_data=f"manage:detail:{account_id}")],
                         [InlineKeyboardButton("🔙 Daftar Akun", callback_data="manage:list")],
                     ])
                     await update.message.reply_text(
-                        f"✅ Label berhasil diperbarui menjadi: **{new_label}**",
+                        f"✅ Label berhasil diperbarui menjadi: **{safe_new_label}**",
                         reply_markup=success_kb,
                         parse_mode=ParseMode.MARKDOWN,
                     )
