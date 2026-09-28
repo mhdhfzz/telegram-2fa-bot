@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram_Bot_API-v20+-2CA5E0.svg?logo=telegram&logoColor=white)](https://python-telegram-bot.org/)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM%20%7C%20Argon2id-green.svg)](https://cryptography.io/)
-[![Tests](https://img.shields.io/badge/Tests-54%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
+[![Tests](https://img.shields.io/badge/Tests-66%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
 [![Demo Bot](https://img.shields.io/badge/Demo_Bot-@VexAuthKey__bot-26A5E4.svg?logo=telegram&logoColor=white)](https://t.me/VexAuthKey_bot)
 
 Bot Telegram yang berfungsi sebagai aplikasi *two-factor authenticator* mandiri (seperti Google Authenticator / Authy), dihosting di VPS menggunakan Python. Bot mendukung multi-tenant dengan data antar-pengguna terisolasi penuh dan dienkripsi kuat menggunakan PIN pribadi masing-masing user.
@@ -26,12 +26,14 @@ Seluruh navigasi berbasis **inline button** dan **inline numeric keypad**, sehin
 - 🔢 **Inline Numeric Keypad**: Input PIN dilakukan melalui grid tombol inline interaktif (`0-9`, `⌫`, `✅`, `❌`) dengan display tersamar (`PIN: • • • • _ _`).
 - 📏 **Panjang PIN Dinamis**: Panjang PIN dapat dikonfigurasi fleksibel (`PIN_LENGTH=4` hingga `PIN_LENGTH=8`, default: 6 digit) melalui environment variable.
 - 📋 **Tap-to-Copy Monospace OTP**: Kode OTP diformat dalam tag monospace tanpa spasi (`<code>123456</code>`), memudahkan pengguna menyalin kode cukup dengan satu sentuhan.
-- ⏳ **Visual Countdown Bar & Dynamic Auto-Refresh**: Progres bar visual sisa waktu kode TOTP (`⏳ [■■■■■■□□□□] 18 detik lagi`) otomatis memperbarui kode saat window waktu berganti, serta dilengkapi tombol refresh manual tanpa bentrok sesi PIN.
+- ⏳ **Visual Countdown Bar & Dynamic Auto-Refresh**: Progres bar visual sisa waktu kode TOTP (`⏳ [■■■■■■□□□□] 18 detik lagi`) otomatis memperbarui kode saat window waktu berganti, serta dilengkapi tombol refresh manual (mendukung HOTP increment counter & TOTP) tanpa bentrok sesi PIN.
 - ⏱️ **Auto-Delete Pesan Sensitif & Pembersihan Otomatis Obrolan**:
   - Pesan berisi kode OTP, recovery phrase, atau dokumen cadangan dihapus otomatis setelah 90 detik (`AUTO_DELETE_SECONDS`).
   - Pesan input pengguna (Secret Key manual, nama label, upload QR, passphrase backup, search query) beserta pesan prompt instruksi bot **otomatis dihapus langsung** setelah direspons, menjaga chat history tetap bersih dan aman dari kebocoran teks plaintext rahasia.
 - 🔄 **Auto-Restore Menu Utama Pasca Auto-Delete**: Ketika pesan kode OTP atau recovery phrase selesai ditampilkan dan terhapus otomatis oleh timer, bot **secara otomatis menampilkan kembali Menu Utama** ke obrolan pengguna tanpa perlu mengetik ulang command `/start`.
-- 🚫 **Exponential Lockout**: Mencegah serangan brute-force PIN (salah 5x berturut-turut mengunci akun selama 5 menit; berlanjut ke 15 menit, lalu maksimum 60 menit).
+- ⚡ **SQLite Concurrency & WAL Hardening**: Menggunakan mode SQLite WAL (`PRAGMA journal_mode=WAL`) dan `PRAGMA busy_timeout=5000` untuk operasi database concurrent yang cepat tanpa risiko *database locked*.
+- 🛡️ **Sanitasi Data & Defensive Input**: Validasi panjang label (maks. 64 karakter), penataan spasi, sanitasi URI OTP (`digits`, `period`, `counter`), dan escaping Markdown menyeluruh untuk mencegah error parsing Telegram.
+- 🚫 **Exponential Lockout**: Mencegah serangan brute-force PIN (salah 5x berturut-turut mengunci akun selama 5 menit; berlanjut ke 15 menit, lalu maksimum 60 menit) dengan countdown timer dan indikator sisa percobaan.
 - 📷 **Scan QR Code & Input Manual**: Tambah akun dengan mengirim foto/tangkapan layar QR code (`otpauth://`) atau memasukkan Secret Key Base32 secara manual.
 - 🗂️ **Cadangan Terenkripsi (Export/Import)**: Cadangkan seluruh akun ke file JSON yang dienkripsi menggunakan passphrase mandiri (terpisah dari PIN login).
 - 🔑 **Recovery Phrase 12 Kata (Dwi-Bahasa)**: Pemulihan akun menggunakan 12 kata acak (mendukung BIP-39 English standar atau daftar kata bahasa Indonesia).
@@ -84,7 +86,7 @@ Seluruh navigasi berbasis **inline button** dan **inline numeric keypad**, sehin
 ├── deploy/
 │   ├── telegram-2fa-bot.service # Unit file systemd untuk Linux VPS
 │   └── README-deploy.md       # Panduan deployment lengkap di VPS
-└── tests/                     # 54 Automated unit & integration tests (pytest)
+└── tests/                     # 66 Automated unit & integration tests (pytest)
 ```
 
 ---
@@ -132,7 +134,7 @@ Buka Telegram, cari bot Anda atau uji melalui bot demo [@VexAuthKey_bot](https:/
 
 ## 🧪 Pengujian Otomatis (Testing)
 
-Proyek ini memiliki **54 unit dan integration test** yang mencakup seluruh lapisan sistem:
+Proyek ini memiliki **66 unit dan integration test** yang mencakup seluruh lapisan sistem:
 
 ```bash
 pytest -v
@@ -140,21 +142,22 @@ pytest -v
 
 Hasil pengujian:
 ```text
-tests/test_add_account.py ...                              [  5%]
-tests/test_backup.py ...                                   [ 11%]
+tests/test_add_account.py ...                              [  4%]
+tests/test_backup.py ....                                  [ 10%]
 tests/test_bot_smoke.py .                                  [ 12%]
-tests/test_config.py ...                                   [ 18%]
-tests/test_crypto.py ......                                [ 29%]
-tests/test_db.py ...                                       [ 35%]
-tests/test_keypad.py ......                                [ 46%]
-tests/test_lockout.py ..                                   [ 50%]
-tests/test_menu_handlers.py .....                          [ 59%]
-tests/test_otp.py ........                                 [ 74%]
-tests/test_settings.py ....                                [ 81%]
-tests/test_start_handler.py ....                           [ 88%]
-tests/test_view_code.py .......                            [100%]
+tests/test_config.py ...                                   [ 16%]
+tests/test_crypto.py ......                                [ 26%]
+tests/test_db.py ...                                       [ 30%]
+tests/test_keypad.py ......                                [ 40%]
+tests/test_lockout.py ..                                   [ 43%]
+tests/test_lockout_handlers.py .....                       [ 50%]
+tests/test_menu_handlers.py .......                        [ 61%]
+tests/test_otp.py ........                                 [ 73%]
+tests/test_settings.py .....                               [ 80%]
+tests/test_start_handler.py .....                          [ 87%]
+tests/test_view_code.py ........                           [100%]
 
-============================= 54 passed in 8.13s =============================
+============================= 66 passed in 9.37s =============================
 ```
 
 ---
