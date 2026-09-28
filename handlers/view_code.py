@@ -11,6 +11,7 @@ from db.models import Account, User
 from handlers.keypad import (
     build_keypad_keyboard,
     clear_keypad_buffer,
+    get_pin_length,
     handle_keypad_press,
     render_pin_display,
 )
@@ -188,10 +189,11 @@ async def handle_select_account_for_code(
             if acc:
                 account_label = acc.label
 
+    pin_len = get_pin_length(context)
     text = (
         f"🔑 **Buka Kode: {account_label}**\n\n"
-        "Masukkan PIN 6 digit Anda:\n\n"
-        f"`{render_pin_display(0)}`"
+        f"Masukkan PIN {pin_len} digit Anda:\n\n"
+        f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("view_pin", show_cancel=True)
 
@@ -212,8 +214,9 @@ async def handle_view_code_pin_keypad(
         return
 
     key_val = parts[2]
+    pin_len = get_pin_length(context)
     buf, is_complete, is_cancel = handle_keypad_press(
-        context.user_data, "view_pin", key_val, max_length=6
+        context.user_data, "view_pin", key_val, max_length=pin_len
     )
 
     account_id = context.user_data.get("view_account_id")
@@ -369,8 +372,8 @@ async def handle_view_code_pin_keypad(
     else:
         text = (
             "🔑 **Buka Kode Akun**\n\n"
-            "Masukkan PIN 6 digit Anda:\n\n"
-            f"`{render_pin_display(len(buf))}`"
+            f"Masukkan PIN {pin_len} digit Anda:\n\n"
+            f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("view_pin", show_cancel=True)
         await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)

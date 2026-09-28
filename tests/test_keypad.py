@@ -5,7 +5,11 @@ from handlers.keypad import (
     render_pin_display,
     handle_keypad_press,
     clear_keypad_buffer,
+    get_pin_length,
 )
+from unittest.mock import MagicMock
+from config import Settings
+
 
 
 def test_build_keypad_keyboard():
@@ -76,3 +80,32 @@ def test_handle_keypad_press_cancel_and_clear():
     user_data[buf_key] = "123456"
     clear_keypad_buffer(user_data, buf_key)
     assert buf_key not in user_data
+
+
+def test_get_pin_length():
+    # From context.bot_data["settings"]
+    context = MagicMock()
+    context.bot_data = {"settings": Settings(bot_token="test", pin_length=4)}
+    assert get_pin_length(context) == 4
+
+    # Fallback to get_settings()
+    assert isinstance(get_pin_length(), int)
+
+
+def test_dynamic_pin_length_4_digits():
+    user_data = {}
+    buf_key = "test_pin4"
+
+    # Display with max_length=4
+    assert render_pin_display(0, max_length=4) == "PIN: _ _ _ _"
+    assert render_pin_display(2, max_length=4) == "PIN: • • _ _"
+    assert render_pin_display(4, max_length=4) == "PIN: • • • •"
+
+    # Keypad input with 4 digits
+    buf, is_complete, _ = handle_keypad_press(user_data, buf_key, "1", max_length=4)
+    assert not is_complete
+    handle_keypad_press(user_data, buf_key, "2", max_length=4)
+    handle_keypad_press(user_data, buf_key, "3", max_length=4)
+    buf, is_complete, _ = handle_keypad_press(user_data, buf_key, "4", max_length=4)
+    assert buf == "1234"
+    assert is_complete is True

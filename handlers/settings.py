@@ -12,6 +12,7 @@ from db.models import Account, User
 from handlers.keypad import (
     build_keypad_keyboard,
     clear_keypad_buffer,
+    get_pin_length,
     handle_keypad_press,
     render_pin_display,
 )
@@ -65,10 +66,11 @@ async def handle_change_pin_start(update: Update, context: ContextTypes.DEFAULT_
     clear_keypad_buffer(context.user_data, "ch_pin_new1")
     clear_keypad_buffer(context.user_data, "ch_pin_new2")
 
+    pin_len = get_pin_length(context)
     text = (
         "🔑 **Ganti PIN - Langkah 1/3**\n\n"
         "Masukkan **PIN Lama** Anda:\n\n"
-        f"`{render_pin_display(0)}`"
+        f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("ch_pin_old", show_cancel=True)
     await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -84,10 +86,11 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
         return
 
     prefix, _, key_val = parts[0], parts[1], parts[2]
+    pin_len = get_pin_length(context)
 
     if prefix == "ch_pin_old":
         buf, is_complete, is_cancel = handle_keypad_press(
-            context.user_data, "ch_pin_old", key_val, max_length=6
+            context.user_data, "ch_pin_old", key_val, max_length=pin_len
         )
         if is_cancel:
             await handle_settings_menu(update, context)
@@ -119,8 +122,8 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
 
             text = (
                 "🔑 **Ganti PIN - Langkah 2/3**\n\n"
-                "Masukkan **PIN Baru 6 digit** Anda:\n\n"
-                f"`{render_pin_display(0)}`"
+                f"Masukkan **PIN Baru {pin_len} digit** Anda:\n\n"
+                f"`{render_pin_display(0, max_length=pin_len)}`"
             )
             markup = build_keypad_keyboard("ch_pin_new1", show_cancel=True)
             await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -128,14 +131,14 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             text = (
                 "🔑 **Ganti PIN - Langkah 1/3**\n\n"
                 "Masukkan **PIN Lama** Anda:\n\n"
-                f"`{render_pin_display(len(buf))}`"
+                f"`{render_pin_display(len(buf), max_length=pin_len)}`"
             )
             markup = build_keypad_keyboard("ch_pin_old", show_cancel=True)
             await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
     elif prefix == "ch_pin_new1":
         buf, is_complete, is_cancel = handle_keypad_press(
-            context.user_data, "ch_pin_new1", key_val, max_length=6
+            context.user_data, "ch_pin_new1", key_val, max_length=pin_len
         )
         if is_cancel:
             await handle_settings_menu(update, context)
@@ -148,23 +151,23 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
 
             text = (
                 "🔑 **Ganti PIN - Langkah 3/3**\n\n"
-                "Silakan **konfirmasi ulang** PIN Baru Anda:\n\n"
-                f"`{render_pin_display(0)}`"
+                f"Silakan **konfirmasi ulang** PIN Baru {pin_len} digit Anda:\n\n"
+                f"`{render_pin_display(0, max_length=pin_len)}`"
             )
             markup = build_keypad_keyboard("ch_pin_new2", show_cancel=True)
             await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
         else:
             text = (
                 "🔑 **Ganti PIN - Langkah 2/3**\n\n"
-                "Masukkan **PIN Baru 6 digit** Anda:\n\n"
-                f"`{render_pin_display(len(buf))}`"
+                f"Masukkan **PIN Baru {pin_len} digit** Anda:\n\n"
+                f"`{render_pin_display(len(buf), max_length=pin_len)}`"
             )
             markup = build_keypad_keyboard("ch_pin_new1", show_cancel=True)
             await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
     elif prefix == "ch_pin_new2":
         buf, is_complete, is_cancel = handle_keypad_press(
-            context.user_data, "ch_pin_new2", key_val, max_length=6
+            context.user_data, "ch_pin_new2", key_val, max_length=pin_len
         )
         if is_cancel:
             await handle_settings_menu(update, context)
@@ -254,8 +257,8 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
         else:
             text = (
                 "🔑 **Ganti PIN - Langkah 3/3**\n\n"
-                "Silakan **konfirmasi ulang** PIN Baru Anda:\n\n"
-                f"`{render_pin_display(len(buf))}`"
+                f"Silakan **konfirmasi ulang** PIN Baru {pin_len} digit Anda:\n\n"
+                f"`{render_pin_display(len(buf), max_length=pin_len)}`"
             )
             markup = build_keypad_keyboard("ch_pin_new2", show_cancel=True)
             await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -266,10 +269,11 @@ async def handle_export_backup_start(update: Update, context: ContextTypes.DEFAU
     await query.answer()
 
     clear_keypad_buffer(context.user_data, "export_pin")
+    pin_len = get_pin_length(context)
     text = (
         "📤 **Ekspor Cadangan (Backup)**\n\n"
-        "Masukkan PIN 6 digit Anda untuk mengonfirmasi pembuatan file cadangan:\n\n"
-        f"`{render_pin_display(0)}`"
+        f"Masukkan PIN {pin_len} digit Anda untuk mengonfirmasi pembuatan file cadangan:\n\n"
+        f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("export_pin", show_cancel=True)
     await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -285,8 +289,9 @@ async def handle_export_pin_keypad(update: Update, context: ContextTypes.DEFAULT
         return
 
     key_val = parts[2]
+    pin_len = get_pin_length(context)
     buf, is_complete, is_cancel = handle_keypad_press(
-        context.user_data, "export_pin", key_val, max_length=6
+        context.user_data, "export_pin", key_val, max_length=pin_len
     )
 
     if is_cancel:
@@ -328,8 +333,8 @@ async def handle_export_pin_keypad(update: Update, context: ContextTypes.DEFAULT
     else:
         text = (
             "📤 **Ekspor Cadangan (Backup)**\n\n"
-            "Masukkan PIN 6 digit Anda:\n\n"
-            f"`{render_pin_display(len(buf))}`"
+            f"Masukkan PIN {pin_len} digit Anda:\n\n"
+            f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("export_pin", show_cancel=True)
         await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -536,11 +541,12 @@ async def handle_import_passphrase_message(update: Update, context: ContextTypes
     context.user_data.pop("settings_state", None)
     clear_keypad_buffer(context.user_data, "import_pin")
 
+    pin_len = get_pin_length(context)
     text = (
         f"✅ **File Berhasil Didekripsi!**\n\n"
         f"Ditemukan **{len(accounts_data)} akun** dalam file cadangan.\n\n"
-        "Masukkan **PIN 6 digit** Anda untuk mengenkripsi dan menyimpan akun-akun ini ke database:\n\n"
-        f"`{render_pin_display(0)}`"
+        f"Masukkan **PIN {pin_len} digit** Anda untuk mengenkripsi dan menyimpan akun-akun ini ke database:\n\n"
+        f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("import_pin", show_cancel=True)
     await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -557,8 +563,9 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
         return
 
     key_val = parts[2]
+    pin_len = get_pin_length(context)
     buf, is_complete, is_cancel = handle_keypad_press(
-        context.user_data, "import_pin", key_val, max_length=6
+        context.user_data, "import_pin", key_val, max_length=pin_len
     )
 
     if is_cancel:
@@ -626,8 +633,8 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
         accounts_data = context.user_data.get("import_accounts_data", [])
         text = (
             f"🔑 **Konfirmasi Impor ({len(accounts_data)} Akun)**\n\n"
-            "Masukkan PIN 6 digit Anda:\n\n"
-            f"`{render_pin_display(len(buf))}`"
+            f"Masukkan PIN {pin_len} digit Anda:\n\n"
+            f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("import_pin", show_cancel=True)
         await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)

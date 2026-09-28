@@ -9,6 +9,7 @@ from db.models import Account, User
 from handlers.keypad import (
     build_keypad_keyboard,
     clear_keypad_buffer,
+    get_pin_length,
     handle_keypad_press,
     render_pin_display,
 )
@@ -209,10 +210,11 @@ async def handle_delete_prompt(
     context.user_data["del_acc_id"] = account_id
     clear_keypad_buffer(context.user_data, "del_pin")
 
+    pin_len = get_pin_length(context)
     text = (
         "⚠️ **Konfirmasi Hapus Akun**\n\n"
-        "Tindakan ini tidak dapat dibatalkan. Masukkan PIN 6 digit Anda untuk mengonfirmasi:\n\n"
-        f"`{render_pin_display(0)}`"
+        f"Tindakan ini tidak dapat dibatalkan. Masukkan PIN {pin_len} digit Anda untuk mengonfirmasi:\n\n"
+        f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("del_pin", show_cancel=True)
     await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -231,8 +233,9 @@ async def handle_delete_account_pin_keypad(
         return
 
     key_val = parts[2]
+    pin_len = get_pin_length(context)
     buf, is_complete, is_cancel = handle_keypad_press(
-        context.user_data, "del_pin", key_val, max_length=6
+        context.user_data, "del_pin", key_val, max_length=pin_len
     )
 
     account_id = context.user_data.get("del_acc_id")
@@ -288,8 +291,8 @@ async def handle_delete_account_pin_keypad(
     else:
         text = (
             "⚠️ **Konfirmasi Hapus Akun**\n\n"
-            "Masukkan PIN 6 digit Anda untuk mengonfirmasi:\n\n"
-            f"`{render_pin_display(len(buf))}`"
+            f"Masukkan PIN {pin_len} digit Anda untuk mengonfirmasi:\n\n"
+            f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("del_pin", show_cancel=True)
         await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)

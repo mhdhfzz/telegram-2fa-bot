@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from config import Settings
 from db.models import User
 from db.session import init_db
 from handlers.start import (
@@ -118,3 +119,56 @@ async def test_setup_pin_mismatch_resets(session_factory):
         from sqlalchemy import select
         res = await session.execute(select(User).where(User.telegram_user_id == user_id))
         assert res.scalars().first() is None
+
+
+@pytest.mark.asyncio
+async def test_start_new_user_prompts_and_completes_4_digit_pin(session_factory):
+    user_id = 777
+    update = MagicMock()
+    update.effective_user.id = user_id
+    update.message.reply_text = AsyncMock()
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {
+        "session_factory": session_factory,
+        "settings": Settings(bot_token="dummy", pin_length=4),
+    }
+    context.job_queue.run_once = MagicMock()
+
+    # Step 1: Start command with pin_length=4
+    await handle_start_command(update, context)
+    update.message.reply_text.assert_called_once()
+    prompt = update.message.reply_text.call_args[0][0]
+    assert "PIN 4 digit" in prompt
+    assert "PIN: _ _ _ _" in prompt
+
+    # Step 2: Keypad input 4 digits
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+    update.message = None
+
+    for digit in "1234":
+        query.data = f"setup_pin:key:{digit}"
+        await handle_setup_pin_keypad(update, context)
+
+    # After 4 digits, prompts confirmation for 4 digits
+    assert query.edit_message_text.call_count == 4
+    confirm_prompt = query.edit_message_text.call_args[0][0]
+    assert "PIN 4 digit" in confirm_prompt
+    assert "konfirmasi ulang" in confirm_prompt
+
+    # Step 3: Keypad confirm 4 digits
+    for digit in "1234":
+        query.data = f"setup_confirm:key:{digit}"
+        await handle_setup_pin_keypad(update, context)
+
+    # User successfully registered in DB
+    async with session_factory() as session:
+        from sqlalchemy import select
+        res = await session.execute(select(User).where(User.telegram_user_id == user_id))
+        user = res.scalars().first()
+        assert user is not None
+        assert user.telegram_user_id == user_id

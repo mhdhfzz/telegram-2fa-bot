@@ -10,6 +10,7 @@ from db.models import Account, User
 from handlers.keypad import (
     build_keypad_keyboard,
     clear_keypad_buffer,
+    get_pin_length,
     handle_keypad_press,
     render_pin_display,
 )
@@ -104,13 +105,14 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     clear_keypad_buffer(context.user_data, "add_acc_pin")
 
     emoji = get_issuer_emoji(parsed.get("issuer"))
+    pin_len = get_pin_length(context)
     prompt_text = (
         f"📷 **QR Code Berhasil Terdeteksi!**\n\n"
         f"{emoji} **Akun**: {parsed['label']}\n"
         f"• **Issuer**: {parsed.get('issuer') or '-'}\n"
         f"• **Tipe**: {parsed['type'].upper()}\n\n"
-        "Masukkan **PIN 6 digit** Anda untuk mengenkripsi dan menyimpan akun ini:\n\n"
-        f"`{render_pin_display(0)}`"
+        f"Masukkan **PIN {pin_len} digit** Anda untuk mengenkripsi dan menyimpan akun ini:\n\n"
+        f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("add_acc_pin", show_cancel=True)
     await update.message.reply_text(prompt_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -201,13 +203,14 @@ async def handle_manual_label_input(update: Update, context: ContextTypes.DEFAUL
     clear_keypad_buffer(context.user_data, "add_acc_pin")
 
     emoji = get_issuer_emoji(issuer)
+    pin_len = get_pin_length(context)
     prompt_text = (
         f"📝 **Konfirmasi Akun Baru**\n\n"
         f"{emoji} **Akun**: {label}\n"
         f"• **Issuer**: {issuer or '-'}\n"
         f"• **Tipe**: TOTP (30s)\n\n"
-        "Masukkan **PIN 6 digit** Anda untuk mengenkripsi dan menyimpan akun ini:\n\n"
-        f"`{render_pin_display(0)}`"
+        f"Masukkan **PIN {pin_len} digit** Anda untuk mengenkripsi dan menyimpan akun ini:\n\n"
+        f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     markup = build_keypad_keyboard("add_acc_pin", show_cancel=True)
     await update.message.reply_text(prompt_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -223,8 +226,9 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
         return
 
     key_val = parts[2]
+    pin_len = get_pin_length(context)
     buf, is_complete, is_cancel = handle_keypad_press(
-        context.user_data, "add_acc_pin", key_val, max_length=6
+        context.user_data, "add_acc_pin", key_val, max_length=pin_len
     )
 
     if is_cancel:
@@ -308,8 +312,8 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
         pending = context.user_data.get("pending_account", {})
         label = pending.get("label", "Akun Baru")
         prompt_text = (
-            f"Masukkan **PIN 6 digit** Anda untuk mengenkripsi dan menyimpan **{label}**:\n\n"
-            f"`{render_pin_display(len(buf))}`"
+            f"Masukkan **PIN {pin_len} digit** Anda untuk mengenkripsi dan menyimpan **{label}**:\n\n"
+            f"`{render_pin_display(len(buf), max_length=pin_len)}`"
         )
         markup = build_keypad_keyboard("add_acc_pin", show_cancel=True)
         await query.edit_message_text(prompt_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)

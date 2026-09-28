@@ -1,5 +1,21 @@
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+
+def get_pin_length(context: Optional[object] = None) -> int:
+    """
+    Get the configured PIN length from context.bot_data["settings"]
+    or fallback to global settings.
+    """
+    if context and hasattr(context, "bot_data") and isinstance(context.bot_data, dict):
+        settings = context.bot_data.get("settings")
+        if settings and hasattr(settings, "pin_length"):
+            return int(settings.pin_length)
+    try:
+        from config import get_settings
+        return int(get_settings().pin_length)
+    except Exception:
+        return 6
 
 
 def build_keypad_keyboard(action_prefix: str, show_cancel: bool = True) -> InlineKeyboardMarkup:
@@ -36,11 +52,14 @@ def build_keypad_keyboard(action_prefix: str, show_cancel: bool = True) -> Inlin
     return InlineKeyboardMarkup(keyboard)
 
 
-def render_pin_display(length: int, max_length: int = 6) -> str:
+def render_pin_display(length: int, max_length: Optional[int] = None) -> str:
     """
     Render masked PIN display (e.g., 'PIN: • • • _ _ _').
     Actual PIN digits are NEVER included.
+    If max_length is not specified, uses the configured pin_length.
     """
+    if max_length is None:
+        max_length = get_pin_length()
     length = max(0, min(length, max_length))
     bullets = ["•"] * length
     underscores = ["_"] * (max_length - length)
@@ -52,13 +71,16 @@ def handle_keypad_press(
     user_data: Dict,
     buffer_key: str,
     key_val: str,
-    max_length: int = 6,
+    max_length: Optional[int] = None,
 ) -> Tuple[str, bool, bool]:
     """
     Update memory buffer based on pressed keypad key.
     Returns:
         (current_buffer: str, is_completed: bool, is_cancelled: bool)
+    If max_length is not specified, uses the configured pin_length.
     """
+    if max_length is None:
+        max_length = get_pin_length()
     buffer = user_data.get(buffer_key, "")
 
     if key_val.isdigit():

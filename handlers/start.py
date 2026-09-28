@@ -10,6 +10,7 @@ from db.models import User
 from handlers.keypad import (
     build_keypad_keyboard,
     clear_keypad_buffer,
+    get_pin_length,
     handle_keypad_press,
     render_pin_display,
 )
@@ -43,11 +44,12 @@ async def handle_start_command(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["setup_pin_1"] = ""
     clear_keypad_buffer(context.user_data, "setup_pin_2")
 
+    pin_len = get_pin_length(context)
     text = (
         "🔐 **Selamat datang di Telegram 2FA Authenticator!**\n\n"
         "Data akun Anda akan dienkripsi dengan standar AES-256-GCM menggunakan PIN pribadi Anda.\n\n"
-        "Silakan buat **PIN 6 digit** Anda menggunakan keypad di bawah:\n\n"
-        f"`{render_pin_display(0)}`"
+        f"Silakan buat **PIN {pin_len} digit** Anda menggunakan keypad di bawah:\n\n"
+        f"`{render_pin_display(0, max_length=pin_len)}`"
     )
     keyboard = build_keypad_keyboard("setup_pin", show_cancel=False)
 
@@ -75,17 +77,18 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
         return
 
     prefix, _, key_val = parts[0], parts[1], parts[2]
+    pin_len = get_pin_length(context)
 
     if prefix == "setup_pin":
         buf, is_complete, _ = handle_keypad_press(
-            context.user_data, "setup_pin_1", key_val, max_length=6
+            context.user_data, "setup_pin_1", key_val, max_length=pin_len
         )
         if is_complete:
             context.user_data["setup_step"] = "pin2"
             context.user_data["setup_pin_2"] = ""
             confirm_text = (
-                "Silakan **konfirmasi ulang** PIN 6 digit Anda:\n\n"
-                f"`{render_pin_display(0)}`"
+                f"Silakan **konfirmasi ulang** PIN {pin_len} digit Anda:\n\n"
+                f"`{render_pin_display(0, max_length=pin_len)}`"
             )
             confirm_kb = build_keypad_keyboard("setup_confirm", show_cancel=False)
             await query.edit_message_text(
@@ -95,8 +98,8 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
             )
         else:
             text = (
-                "Silakan buat **PIN 6 digit** Anda menggunakan keypad di bawah:\n\n"
-                f"`{render_pin_display(len(buf))}`"
+                f"Silakan buat **PIN {pin_len} digit** Anda menggunakan keypad di bawah:\n\n"
+                f"`{render_pin_display(len(buf), max_length=pin_len)}`"
             )
             kb = build_keypad_keyboard("setup_pin", show_cancel=False)
             await query.edit_message_text(
@@ -107,7 +110,7 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
 
     elif prefix == "setup_confirm":
         buf2, is_complete2, _ = handle_keypad_press(
-            context.user_data, "setup_pin_2", key_val, max_length=6
+            context.user_data, "setup_pin_2", key_val, max_length=pin_len
         )
         if is_complete2:
             pin1 = context.user_data.get("setup_pin_1", "")
@@ -119,7 +122,7 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
                 mismatch_text = (
                     "❌ **PIN tidak cocok!**\n\n"
                     "Silakan buat PIN kembali dari awal:\n\n"
-                    f"`{render_pin_display(0)}`"
+                    f"`{render_pin_display(0, max_length=pin_len)}`"
                 )
                 kb = build_keypad_keyboard("setup_pin", show_cancel=False)
                 await query.edit_message_text(
@@ -184,8 +187,8 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
                 )
         else:
             confirm_text = (
-                "Silakan **konfirmasi ulang** PIN 6 digit Anda:\n\n"
-                f"`{render_pin_display(len(buf2))}`"
+                f"Silakan **konfirmasi ulang** PIN {pin_len} digit Anda:\n\n"
+                f"`{render_pin_display(len(buf2), max_length=pin_len)}`"
             )
             confirm_kb = build_keypad_keyboard("setup_confirm", show_cancel=False)
             await query.edit_message_text(
@@ -193,6 +196,7 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
                 reply_markup=confirm_kb,
                 parse_mode=ParseMode.MARKDOWN,
             )
+
 
 
 async def handle_confirm_phrase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
