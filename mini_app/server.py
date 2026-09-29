@@ -31,12 +31,32 @@ logger = logging.getLogger("mini_app.server")
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-def cors_headers() -> Dict[str, str]:
+def security_headers() -> Dict[str, str]:
+    """Strict HTTP security headers for Mini App serving."""
     return {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Token, X-Telegram-Init-Data",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Content-Security-Policy": (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://telegram.org; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: https://cdn.simpleicons.org; "
+            "connect-src 'self'; "
+            "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org tg:;"
+        ),
     }
+
+
+def cors_headers() -> Dict[str, str]:
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Token, X-Telegram-Init-Data",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+    }
+    return headers
 
 
 def json_response(data: Any, status: int = 200) -> web.Response:
@@ -71,11 +91,11 @@ class MiniAppHandler:
             return None
         return self.session_manager.get_session(token)
 
-    async def handle_index(self, request: web.Request) -> web.FileResponse:
+    async def handle_index(self, request: web.Request) -> web.StreamResponse:
         index_file = STATIC_DIR / "index.html"
         if not index_file.exists():
             return web.Response(text="Mini App frontend static file not found.", status=404)
-        return web.FileResponse(index_file)
+        return web.FileResponse(index_file, headers=security_headers())
 
     async def handle_status(self, request: web.Request) -> web.Response:
         settings = get_settings()

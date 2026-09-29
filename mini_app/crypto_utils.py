@@ -10,7 +10,7 @@ from urllib.parse import parse_qsl
 def validate_telegram_init_data(
     init_data: str,
     bot_token: str,
-    max_age_seconds: int = 86400,
+    max_age_seconds: int = 3600,
 ) -> Optional[Dict[str, Any]]:
     """
     Validate initData string received from Telegram WebApp.

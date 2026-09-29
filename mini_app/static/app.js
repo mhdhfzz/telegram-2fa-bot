@@ -425,8 +425,8 @@
     if (acc.slug) {
       const svgUrl = `https://cdn.simpleicons.org/${acc.slug}/white`;
       avatarHtml = `
-        <div class="brand-avatar" title="${acc.issuer || 'Account'}">
-          <img class="brand-svg-img" src="${svgUrl}" alt="${acc.issuer || ''}"
+        <div class="brand-avatar" title="${escapeHtml(acc.issuer || 'Account')}">
+          <img class="brand-svg-img" src="${svgUrl}" alt="${escapeHtml(acc.issuer || '')}"
                onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\'brand-emoji-fallback\\'>${acc.emoji || '🔐'}</span>';">
         </div>
       `;
