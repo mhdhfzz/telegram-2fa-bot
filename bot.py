@@ -188,6 +188,10 @@ async def text_message_dispatcher(update: Update, context: ContextTypes.DEFAULT_
         await handle_manual_label_input(update, context)
         return
     elif add_state == "awaiting_qr":
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
         await update.message.reply_text(
             "📷 Bot sedang menunggu kiriman foto / gambar QR Code.\n\n"
             "Jika Anda ingin memasukkan Secret Key secara manual lewat teks, silakan pilih tombol di bawah:",
