@@ -79,10 +79,21 @@
     inputNewPin: document.getElementById('inputNewPin'),
     inputConfirmPin: document.getElementById('inputConfirmPin'),
     changePinMsg: document.getElementById('changePinMsg'),
+
+    // Backup & Restore
+    formExportBackup: document.getElementById('formExportBackup'),
+    inputExportPassphrase: document.getElementById('inputExportPassphrase'),
+    inputConfirmExportPassphrase: document.getElementById('inputConfirmExportPassphrase'),
+    exportBackupMsg: document.getElementById('exportBackupMsg'),
     btnExportBackup: document.getElementById('btnExportBackup'),
     backupOutputArea: document.getElementById('backupOutputArea'),
     backupJsonText: document.getElementById('backupJsonText'),
+    btnDownloadBackupFile: document.getElementById('btnDownloadBackupFile'),
     btnCopyBackupJson: document.getElementById('btnCopyBackupJson'),
+
+    formImportBackup: document.getElementById('formImportBackup'),
+    fileImportBackup: document.getElementById('fileImportBackup'),
+    btnChooseBackupFile: document.getElementById('btnChooseBackupFile'),
     inputImportJson: document.getElementById('inputImportJson'),
     inputImportPassphrase: document.getElementById('inputImportPassphrase'),
     importBackupMsg: document.getElementById('importBackupMsg'),
@@ -842,7 +853,15 @@
     switchSettingsTab('tabPin');
     el.formChangePin.reset();
     el.changePinMsg.classList.add('hidden');
-    el.backupOutputArea.classList.add('hidden');
+
+    if (el.formExportBackup) el.formExportBackup.reset();
+    if (el.exportBackupMsg) el.exportBackupMsg.classList.add('hidden');
+    if (el.backupOutputArea) el.backupOutputArea.classList.add('hidden');
+
+    if (el.formImportBackup) el.formImportBackup.reset();
+    if (el.importBackupMsg) el.importBackupMsg.classList.add('hidden');
+    if (el.fileImportBackup) el.fileImportBackup.value = '';
+
     el.modalSettings.classList.add('active');
   }
 
@@ -919,20 +938,102 @@
     }
   }
 
-  async function exportBackup() {
+  let currentExportFilename = 'telegram_2fa_backup.json';
+
+  async function exportBackup(e) {
+    if (e) e.preventDefault();
+    if (el.exportBackupMsg) el.exportBackupMsg.classList.add('hidden');
+
+    const passphrase = (el.inputExportPassphrase?.value || '').trim();
+    const confirm = (el.inputConfirmExportPassphrase?.value || '').trim();
+
+    if (!passphrase) {
+      if (el.exportBackupMsg) {
+        el.exportBackupMsg.textContent = 'Masukkan Passphrase Enkripsi Backup.';
+        el.exportBackupMsg.classList.remove('hidden');
+      }
+      el.inputExportPassphrase?.focus();
+      return;
+    }
+
+    if (passphrase.length < 4) {
+      if (el.exportBackupMsg) {
+        el.exportBackupMsg.textContent = 'Passphrase enkripsi minimal 4 karakter.';
+        el.exportBackupMsg.classList.remove('hidden');
+      }
+      el.inputExportPassphrase?.focus();
+      return;
+    }
+
+    if (passphrase !== confirm) {
+      if (el.exportBackupMsg) {
+        el.exportBackupMsg.textContent = 'Konfirmasi passphrase tidak cocok.';
+        el.exportBackupMsg.classList.remove('hidden');
+      }
+      el.inputConfirmExportPassphrase?.focus();
+      return;
+    }
+
+    const origBtnText = el.btnExportBackup.textContent;
+    el.btnExportBackup.disabled = true;
+    el.btnExportBackup.textContent = 'Mengekspor & mengenkripsi...';
+
     try {
-      const res = await apiFetch('/api/settings/backup');
+      const res = await apiFetch('/api/settings/backup', {
+        method: 'POST',
+        body: JSON.stringify({ passphrase }),
+      });
       const data = await res.json();
+
       if (!res.ok || !data.success) {
-        showToast('Gagal mengekspor data cadangan', '❌');
+        if (el.exportBackupMsg) {
+          el.exportBackupMsg.textContent = data.error || 'Gagal mengekspor data cadangan.';
+          el.exportBackupMsg.classList.remove('hidden');
+        }
         return;
       }
 
-      el.backupJsonText.value = JSON.stringify(data, null, 2);
+      const backupEnvelope = data.backup || data;
+      currentExportFilename = data.filename || `telegram_2fa_backup_${Date.now()}.json`;
+
+      el.backupJsonText.value = JSON.stringify(backupEnvelope, null, 2);
       el.backupOutputArea.classList.remove('hidden');
-      showToast('Cadangan berhasil diekspor!', '📥');
+
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
+      showToast('Cadangan terenkripsi berhasil dibuat!', '🔒');
     } catch (err) {
-      showToast('Kesalahan saat mengekspor cadangan', '❌');
+      if (el.exportBackupMsg) {
+        el.exportBackupMsg.textContent = 'Terjadi kesalahan jaringan saat mengekspor cadangan.';
+        el.exportBackupMsg.classList.remove('hidden');
+      }
+    } finally {
+      el.btnExportBackup.disabled = false;
+      el.btnExportBackup.textContent = origBtnText;
+    }
+  }
+
+  function downloadBackupFile() {
+    const val = el.backupJsonText.value;
+    if (!val) {
+      showToast('Tidak ada data cadangan untuk diunduh', '❌');
+      return;
+    }
+
+    try {
+      const blob = new Blob([val], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = currentExportFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast('File cadangan diunduh!', '📥');
+    } catch (err) {
+      showToast('Gagal mengunduh file cadangan', '❌');
     }
   }
 
@@ -940,17 +1041,23 @@
     const val = el.backupJsonText.value;
     if (!val) return;
     navigator.clipboard.writeText(val).then(() => {
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
       showToast('Data cadangan disalin ke clipboard!', '📋');
+    }).catch(() => {
+      showToast('Gagal menyalin data cadangan', '❌');
     });
   }
 
-  async function submitImportBackup() {
-    el.importBackupMsg.classList.add('hidden');
+  async function submitImportBackup(e) {
+    if (e) e.preventDefault();
+    if (el.importBackupMsg) el.importBackupMsg.classList.add('hidden');
     const rawText = (el.inputImportJson.value || '').trim();
     const passphrase = (el.inputImportPassphrase.value || '').trim();
 
     if (!rawText) {
-      el.importBackupMsg.textContent = 'Silakan tempelkan data JSON cadangan terlebih dahulu.';
+      el.importBackupMsg.textContent = 'Pilih file .json atau tempelkan data JSON cadangan terlebih dahulu.';
       el.importBackupMsg.classList.remove('hidden');
       return;
     }
@@ -959,10 +1066,23 @@
     try {
       parsedPayload = JSON.parse(rawText);
     } catch (e) {
-      el.importBackupMsg.textContent = 'Format JSON tidak valid. Periksa kembali teks cadangan Anda.';
+      el.importBackupMsg.textContent = 'Format JSON tidak valid. Periksa kembali isi file atau teks cadangan Anda.';
       el.importBackupMsg.classList.remove('hidden');
       return;
     }
+
+    if (parsedPayload && typeof parsedPayload === 'object' && parsedPayload.ciphertext) {
+      if (!passphrase) {
+        el.importBackupMsg.textContent = 'File cadangan terenkripsi. Silakan masukkan Passphrase Dekripsi.';
+        el.importBackupMsg.classList.remove('hidden');
+        el.inputImportPassphrase.focus();
+        return;
+      }
+    }
+
+    const origBtnText = el.btnSubmitImportBackup.textContent;
+    el.btnSubmitImportBackup.disabled = true;
+    el.btnSubmitImportBackup.textContent = 'Memulihkan akun...';
 
     try {
       const res = await apiFetch('/api/settings/import', {
@@ -982,12 +1102,20 @@
 
       el.inputImportJson.value = '';
       el.inputImportPassphrase.value = '';
+      if (el.fileImportBackup) el.fileImportBackup.value = '';
+
       closeSettingsModal();
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
       showToast(data.message || `Berhasil mengimpor ${data.imported} akun!`, '📥');
       await loadAccounts();
     } catch (err) {
       el.importBackupMsg.textContent = 'Terjadi kesalahan jaringan saat mengimpor cadangan.';
       el.importBackupMsg.classList.remove('hidden');
+    } finally {
+      el.btnSubmitImportBackup.disabled = false;
+      el.btnSubmitImportBackup.textContent = origBtnText;
     }
   }
 
@@ -1059,9 +1187,48 @@
       btn.addEventListener('click', () => switchSettingsTab(btn.dataset.tab));
     });
     el.formChangePin.addEventListener('submit', submitChangePin);
-    el.btnExportBackup.addEventListener('click', exportBackup);
-    el.btnCopyBackupJson.addEventListener('click', copyBackupJson);
-    if (el.btnSubmitImportBackup) {
+
+    // Export & Download Backup
+    if (el.formExportBackup) {
+      el.formExportBackup.addEventListener('submit', exportBackup);
+    } else if (el.btnExportBackup) {
+      el.btnExportBackup.addEventListener('click', exportBackup);
+    }
+    if (el.btnDownloadBackupFile) {
+      el.btnDownloadBackupFile.addEventListener('click', downloadBackupFile);
+    }
+    if (el.btnCopyBackupJson) {
+      el.btnCopyBackupJson.addEventListener('click', copyBackupJson);
+    }
+
+    // Import & File Choose
+    if (el.btnChooseBackupFile && el.fileImportBackup) {
+      el.btnChooseBackupFile.addEventListener('click', () => {
+        el.fileImportBackup.value = '';
+        el.fileImportBackup.click();
+      });
+
+      el.fileImportBackup.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          el.inputImportJson.value = event.target.result;
+          if (el.importBackupMsg) el.importBackupMsg.classList.add('hidden');
+          showToast(`File "${file.name}" dimuat!`, '📁');
+          if (el.inputImportPassphrase) el.inputImportPassphrase.focus();
+        };
+        reader.onerror = () => {
+          showToast('Gagal membaca file cadangan', '❌');
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    if (el.formImportBackup) {
+      el.formImportBackup.addEventListener('submit', submitImportBackup);
+    } else if (el.btnSubmitImportBackup) {
       el.btnSubmitImportBackup.addEventListener('click', submitImportBackup);
     }
 

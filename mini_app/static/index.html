@@ -253,30 +253,58 @@
 
         <!-- Tab: Backup -->
         <div id="tabBackup" class="settings-tab-pane">
-          <p class="settings-info-text">Ekspor atau pulihkan data akun dan rahasia 2FA Anda ke dalam format JSON terstruktur untuk pencadangan aman.</p>
-          <div class="backup-actions-box">
-            <button type="button" id="btnExportBackup" class="btn-primary full-width">📤 Ekspor Cadangan (JSON)</button>
-          </div>
-          <div id="backupOutputArea" class="hidden">
-            <label class="backup-label">Data Cadangan Anda:</label>
-            <textarea id="backupJsonText" readonly rows="5" class="backup-textarea"></textarea>
-            <button type="button" id="btnCopyBackupJson" class="btn-secondary full-width">📋 Salin Data Cadangan</button>
+          <!-- Subcard: Export Backup -->
+          <div class="settings-subcard">
+            <h3 class="settings-subcard-title">📤 Ekspor Cadangan Terenkripsi</h3>
+            <p class="settings-info-text">Cadangan Anda diamankan menggunakan enkripsi AES-256-GCM + Argon2id dari passphrase. File cadangan ini kompatibel penuh dengan bot chat Telegram maupun Mini App.</p>
+            
+            <form id="formExportBackup" class="modal-form" style="margin-top: 10px;">
+              <div class="form-group">
+                <label for="inputExportPassphrase">Passphrase Enkripsi Backup <span class="required">*</span></label>
+                <input type="password" id="inputExportPassphrase" placeholder="Passphrase enkripsi (min. 4 karakter)" required autocomplete="new-password">
+              </div>
+              <div class="form-group">
+                <label for="inputConfirmExportPassphrase">Konfirmasi Passphrase <span class="required">*</span></label>
+                <input type="password" id="inputConfirmExportPassphrase" placeholder="Ulangi passphrase enkripsi" required autocomplete="new-password">
+              </div>
+              <div id="exportBackupMsg" class="form-error-msg hidden"></div>
+              <button type="submit" id="btnExportBackup" class="btn-primary full-width">🔒 Buat Cadangan Terenkripsi</button>
+            </form>
+
+            <div id="backupOutputArea" class="hidden" style="margin-top: 14px;">
+              <label class="backup-label">Data Cadangan Terenkripsi (JSON):</label>
+              <textarea id="backupJsonText" readonly rows="5" class="backup-textarea"></textarea>
+              <div class="modal-actions" style="margin-top: 6px;">
+                <button type="button" id="btnDownloadBackupFile" class="btn-primary">📥 Unduh File (.json)</button>
+                <button type="button" id="btnCopyBackupJson" class="btn-secondary">📋 Salin Teks</button>
+              </div>
+            </div>
           </div>
 
-          <hr class="settings-divider" style="margin: 20px 0; border: none; border-top: 1px solid var(--border-color);">
+          <hr class="settings-divider" style="margin: 16px 0; border: none; border-top: 1px solid var(--glass-border);">
 
-          <div class="import-backup-section">
-            <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">📥 Impor Cadangan Akun</h3>
-            <p class="settings-info-text" style="margin-bottom: 10px;">Tempelkan teks JSON cadangan (dari bot atau Mini App) di bawah ini:</p>
-            <div class="form-group">
-              <textarea id="inputImportJson" rows="4" class="backup-textarea" placeholder='Tempelkan JSON cadangan di sini... {"accounts": [...]}'></textarea>
-            </div>
-            <div class="form-group">
-              <label for="inputImportPassphrase" style="font-size: 12px;">Passphrase (Jika file terenkripsi dari bot)</label>
-              <input type="password" id="inputImportPassphrase" placeholder="Passphrase cadangan (opsional)" autocomplete="off">
-            </div>
-            <div id="importBackupMsg" class="form-error-msg hidden"></div>
-            <button type="button" id="btnSubmitImportBackup" class="btn-primary full-width">📥 Pulihkan & Simpan Akun</button>
+          <!-- Subcard: Import Backup -->
+          <div class="settings-subcard">
+            <h3 class="settings-subcard-title">📥 Impor & Pulihkan Cadangan</h3>
+            <p class="settings-info-text">Pulihkan akun dari file <code>.json</code> cadangan bot Telegram atau tempel teks JSON cadangan.</p>
+
+            <form id="formImportBackup" class="modal-form" style="margin-top: 10px;">
+              <input type="file" id="fileImportBackup" accept=".json,application/json" class="file-input-hidden">
+              <button type="button" id="btnChooseBackupFile" class="btn-secondary full-width" style="margin-bottom: 8px;">📁 Pilih File Cadangan (.json)</button>
+
+              <div class="form-group">
+                <label for="inputImportJson">Atau Tempel Teks Cadangan (JSON)</label>
+                <textarea id="inputImportJson" rows="4" class="backup-textarea" placeholder='Tempelkan isi file cadangan di sini... {"version": 1, "format": "telegram_2fa_backup", ...}'></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="inputImportPassphrase">Passphrase Dekripsi (Jika file terenkripsi) <span class="required">*</span></label>
+                <input type="password" id="inputImportPassphrase" placeholder="Passphrase enkripsi saat cadangan dibuat" autocomplete="current-password">
+              </div>
+
+              <div id="importBackupMsg" class="form-error-msg hidden"></div>
+              <button type="submit" id="btnSubmitImportBackup" class="btn-primary full-width">📥 Pulihkan & Simpan Akun</button>
+            </form>
           </div>
         </div>
 

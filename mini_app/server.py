@@ -581,7 +581,11 @@ class MiniAppHandler:
             return json_response({"logs": results})
 
     async def handle_export_backup(self, request: web.Request) -> web.Response:
-        """Export accounts backup as JSON."""
+        """
+        Export accounts backup.
+        If passphrase is provided (min 4 characters), encrypts payload using AES-256-GCM + Argon2id
+        compatible with Telegram Bot backup standard.
+        """
         client_session = self._extract_session(request)
         if not client_session:
             return json_response({"error": "Unauthorized"}, status=401)
@@ -589,9 +593,22 @@ class MiniAppHandler:
         user_id = client_session["user_id"]
         derived_key = client_session["derived_key"]
 
+        passphrase = ""
+        if request.method == "POST":
+            try:
+                body = await request.json()
+                passphrase = str(body.get("passphrase", "")).strip()
+            except Exception:
+                passphrase = ""
+        elif request.method == "GET":
+            passphrase = str(request.query.get("passphrase", "")).strip()
+
         async with self.session_factory() as session:
             stmt = select(Account).where(Account.user_id == user_id).order_by(Account.created_at.asc())
             accounts = (await session.execute(stmt)).scalars().all()
+
+            if not accounts:
+                return json_response({"success": False, "error": "Belum ada akun tersimpan untuk diekspor."}, status=400)
 
             backup_items = []
             for acc in accounts:
@@ -611,16 +628,54 @@ class MiniAppHandler:
                 })
 
             from datetime import datetime
-            await log_action(session, user_id, "miniapp_export_backup", success=True)
-            return json_response({
-                "success": True,
-                "total": len(backup_items),
-                "exported_at": format_local_timestamp(datetime.now(), "%Y-%m-%d %H:%M:%S"),
-                "accounts": backup_items,
-            })
+            filename = f"telegram_2fa_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+            if passphrase:
+                if len(passphrase) < 4:
+                    return json_response({
+                        "success": False,
+                        "error": "Passphrase enkripsi minimal 4 karakter.",
+                    }, status=400)
+
+                from services.backup_service import export_accounts_backup
+                import json
+                try:
+                    backup_bytes = export_accounts_backup(backup_items, passphrase)
+                    envelope_data = json.loads(backup_bytes.decode("utf-8"))
+                except Exception as e:
+                    return json_response({
+                        "success": False,
+                        "error": f"Gagal mengenkripsi cadangan: {e}",
+                    }, status=500)
+
+                await log_action(session, user_id, "miniapp_export_backup", success=True)
+                return json_response({
+                    "success": True,
+                    "is_encrypted": True,
+                    "total": len(backup_items),
+                    "filename": filename,
+                    "exported_at": format_local_timestamp(datetime.now(), "%Y-%m-%d %H:%M:%S"),
+                    "backup": envelope_data,
+                    "accounts": backup_items,
+                })
+            else:
+                await log_action(session, user_id, "miniapp_export_backup", success=True)
+                return json_response({
+                    "success": True,
+                    "is_encrypted": False,
+                    "total": len(backup_items),
+                    "filename": filename,
+                    "exported_at": format_local_timestamp(datetime.now(), "%Y-%m-%d %H:%M:%S"),
+                    "accounts": backup_items,
+                    "backup": {
+                        "version": 1,
+                        "format": "telegram_2fa_backup_plain",
+                        "accounts": backup_items,
+                    },
+                })
 
     async def handle_import_backup(self, request: web.Request) -> web.Response:
-        """Import accounts backup from JSON payload."""
+        """Import accounts backup from JSON payload (encrypted envelope or accounts array)."""
         client_session = self._extract_session(request)
         if not client_session:
             return json_response({"error": "Unauthorized"}, status=401)
@@ -636,15 +691,37 @@ class MiniAppHandler:
         passphrase = str(body.get("passphrase", "")).strip()
         raw_backup = body.get("backup")
 
+        # If backup was sent as raw string (e.g. from textarea or file reader)
+        if isinstance(raw_backup, str):
+            try:
+                import json
+                raw_backup = json.loads(raw_backup.strip())
+            except Exception:
+                return json_response({"success": False, "error": "Format data cadangan JSON tidak valid."}, status=400)
+
+        # If root body itself is the backup dictionary
+        if raw_backup is None:
+            if isinstance(body, dict) and ("ciphertext" in body or "accounts" in body):
+                raw_backup = body
+
         accounts_to_import = []
         if isinstance(raw_backup, dict) and "ciphertext" in raw_backup:
+            if not passphrase:
+                return json_response({
+                    "success": False,
+                    "error": "Passphrase diperlukan untuk mendekripsi file cadangan terenkripsi.",
+                }, status=400)
+
             from services.backup_service import import_accounts_backup
             import json
             try:
                 backup_bytes = json.dumps(raw_backup).encode("utf-8")
                 accounts_to_import = import_accounts_backup(backup_bytes, passphrase)
-            except Exception as e:
-                return json_response({"success": False, "error": f"Gagal mendekripsi cadangan: {e}"}, status=400)
+            except Exception:
+                return json_response({
+                    "success": False,
+                    "error": "Passphrase salah atau file cadangan rusak / tidak valid.",
+                }, status=400)
         elif isinstance(raw_backup, dict) and "accounts" in raw_backup and isinstance(raw_backup["accounts"], list):
             accounts_to_import = raw_backup["accounts"]
         elif isinstance(raw_backup, list):
@@ -734,6 +811,7 @@ def create_mini_app(
     app.router.add_post("/api/settings/change_pin", handler.handle_change_pin)
     app.router.add_get("/api/settings/logs", handler.handle_get_audit_logs)
     app.router.add_get("/api/settings/backup", handler.handle_export_backup)
+    app.router.add_post("/api/settings/backup", handler.handle_export_backup)
     app.router.add_post("/api/settings/import", handler.handle_import_backup)
 
     # Preflight OPTIONS

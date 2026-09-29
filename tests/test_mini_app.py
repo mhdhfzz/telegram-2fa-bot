@@ -554,4 +554,147 @@ async def test_mini_app_import_backup_and_validation(tmp_path):
         await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_mini_app_encrypted_backup_export_and_import(tmp_path):
+    """Test encrypted export with passphrase and encrypted import in Mini App."""
+    import json
+    from services.backup_service import import_accounts_backup
+
+    db_file = tmp_path / "miniapp_enc_backup.db"
+    engine = get_async_engine(str(db_file))
+    session_factory = get_session_factory(engine)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    bot_token = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+    pin = "123456"
+    pin_salt = generate_salt()
+    kdf_salt = generate_salt()
+    user_hash = hash_pin(pin, pin_salt)
+
+    telegram_user_id = 1122334455
+    async with session_factory() as session:
+        user = User(
+            telegram_user_id=telegram_user_id,
+            pin_hash=user_hash,
+            pin_hash_salt=pin_salt,
+            kdf_salt=kdf_salt,
+        )
+        session.add(user)
+        await session.commit()
+
+    app = create_mini_app(bot_token, session_factory)
+    client = TestClient(TestServer(app))
+    await client.start_server()
+
+    try:
+        init_data = generate_mock_init_data(bot_token, {"id": telegram_user_id, "first_name": "Backuper"})
+        resp_login = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": pin})
+        assert resp_login.status == 200
+        token = (await resp_login.json())["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Export when 0 accounts exist
+        resp_empty_exp = await client.post("/api/settings/backup", json={"passphrase": "secretpassword"}, headers=headers)
+        assert resp_empty_exp.status == 400
+        assert "Belum ada akun tersimpan" in (await resp_empty_exp.json())["error"]
+
+        # 2. Add 2 accounts (TOTP and HOTP)
+        await client.post("/api/accounts", json={
+            "label": "Work Google",
+            "issuer": "Google",
+            "secret": "JBSWY3DPEHPK3PXP",
+            "type": "totp",
+            "digits": 6,
+            "period": 30,
+        }, headers=headers)
+
+        await client.post("/api/accounts", json={
+            "label": "Server HOTP",
+            "issuer": "Debian",
+            "secret": "JBSWY3DPEHPK3PXP",
+            "type": "hotp",
+            "digits": 8,
+            "hotp_counter": 5,
+        }, headers=headers)
+
+        # 3. Export with short passphrase (< 4 chars)
+        resp_short_pw = await client.post("/api/settings/backup", json={"passphrase": "123"}, headers=headers)
+        assert resp_short_pw.status == 400
+        assert "Passphrase enkripsi minimal 4 karakter" in (await resp_short_pw.json())["error"]
+
+        # 4. Export with valid passphrase (AES-256-GCM + Argon2id encrypted envelope)
+        backup_passphrase = "UltraSecurePassphrase2026!"
+        resp_exp_ok = await client.post("/api/settings/backup", json={"passphrase": backup_passphrase}, headers=headers)
+        assert resp_exp_ok.status == 200
+        exp_data = await resp_exp_ok.json()
+        assert exp_data["success"] is True
+        assert exp_data["is_encrypted"] is True
+        assert exp_data["total"] == 2
+        assert "telegram_2fa_backup_" in exp_data["filename"]
+
+        envelope = exp_data["backup"]
+        assert envelope["version"] == 1
+        assert envelope["format"] == "telegram_2fa_backup"
+        assert "salt" in envelope
+        assert "nonce" in envelope
+        assert "ciphertext" in envelope
+
+        # Verify envelope can be decrypted by standard backup_service
+        envelope_bytes = json.dumps(envelope).encode("utf-8")
+        decrypted_accs = import_accounts_backup(envelope_bytes, backup_passphrase)
+        assert len(decrypted_accs) == 2
+        labels = [a["label"] for a in decrypted_accs]
+        assert "Work Google" in labels
+        assert "Server HOTP" in labels
+
+        # 5. Test Import: missing passphrase for encrypted envelope
+        resp_imp_no_pass = await client.post("/api/settings/import", json={
+            "backup": envelope,
+            "passphrase": "",
+        }, headers=headers)
+        assert resp_imp_no_pass.status == 400
+        assert "Passphrase diperlukan" in (await resp_imp_no_pass.json())["error"]
+
+        # 6. Test Import: wrong passphrase
+        resp_imp_bad_pass = await client.post("/api/settings/import", json={
+            "backup": envelope,
+            "passphrase": "WrongPassword999",
+        }, headers=headers)
+        assert resp_imp_bad_pass.status == 400
+        assert "Passphrase salah atau file cadangan rusak" in (await resp_imp_bad_pass.json())["error"]
+
+        # 7. Test Import: correct passphrase from envelope dict
+        resp_imp_ok = await client.post("/api/settings/import", json={
+            "backup": envelope,
+            "passphrase": backup_passphrase,
+        }, headers=headers)
+        assert resp_imp_ok.status == 200
+        data_imp = await resp_imp_ok.json()
+        assert data_imp["success"] is True
+        assert data_imp["imported"] == 2
+
+        # 8. Test Import: from raw JSON string (e.g. FileReader or textarea upload)
+        raw_json_str = json.dumps(envelope)
+        resp_imp_str = await client.post("/api/settings/import", json={
+            "backup": raw_json_str,
+            "passphrase": backup_passphrase,
+        }, headers=headers)
+        assert resp_imp_str.status == 200
+        assert (await resp_imp_str.json())["imported"] == 2
+
+        # Verify total accounts in database
+        resp_accs_all = await client.get("/api/accounts", headers=headers)
+        assert resp_accs_all.status == 200
+        accs_list = (await resp_accs_all.json())["accounts"]
+        # 2 original + 2 from first import + 2 from second import = 6 accounts
+        assert len(accs_list) == 6
+
+    finally:
+        await client.close()
+        await engine.dispose()
+
+
+
 

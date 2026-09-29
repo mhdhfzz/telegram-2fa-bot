@@ -1247,6 +1247,24 @@ body::after {
   color: var(--text-secondary);
 }
 
+.settings-subcard {
+  background: var(--bg-glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+}
+
+.settings-subcard-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.file-input-hidden {
+  display: none !important;
+}
+
 .audit-logs-list {
   display: flex;
   flex-direction: column;
