@@ -38,7 +38,7 @@ ISSUER_EMOJI_MAP = {
 
 def get_issuer_emoji(issuer: Optional[str]) -> str:
     """Return an emoji representation for the given issuer, default to lock emoji."""
-    if not issuer:
+    if not issuer or not isinstance(issuer, str):
         return "🔐"
     normalized = issuer.strip().lower()
     for key, emoji in ISSUER_EMOJI_MAP.items():

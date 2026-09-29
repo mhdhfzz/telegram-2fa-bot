@@ -39,8 +39,9 @@ async def get_user_logs(
     count_res = await session.execute(count_query)
     total_count = count_res.scalar_one()
 
+    page_size = max(1, page_size) if isinstance(page_size, int) and page_size > 0 else 10
     total_pages = max(1, math.ceil(total_count / page_size)) if total_count > 0 else 1
-    page = max(1, min(page, total_pages))
+    page = max(1, min(page, total_pages)) if isinstance(page, int) else 1
 
     offset = (page - 1) * page_size
     query = (

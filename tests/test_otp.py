@@ -1,6 +1,7 @@
 import time
 import pytest
 from services.otp_service import (
+    clean_base32_secret,
     generate_totp_code,
     get_totp_remaining_seconds,
     generate_hotp_code,
@@ -124,4 +125,18 @@ def test_otp_service_defensive_parameters():
 
     bar_neg = render_countdown_bar(10, total_period=-10)
     assert "10 detik lagi" in bar_neg
+
+    # Test clean_base32_secret with None and non-string inputs
+    assert clean_base32_secret(None) == ""
+    assert clean_base32_secret(12345) == ""  # type: ignore
+
+    # Test format_otp_display with None and integer inputs
+    assert format_otp_display(None) == "<code></code>"
+    assert format_otp_display(123456) == "<code>123456</code>"  # type: ignore
+
+    # Test get_issuer_emoji with non-string and None inputs
+    assert get_issuer_emoji(None) == "🔐"
+    assert get_issuer_emoji(12345) == "🔐"  # type: ignore
+    assert get_issuer_emoji("   ") == "🔐"
+
 

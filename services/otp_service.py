@@ -6,6 +6,8 @@ import pyotp
 
 def clean_base32_secret(secret: str) -> str:
     """Strip spaces and hyphens and uppercase the base32 secret."""
+    if not secret or not isinstance(secret, str):
+        return ""
     return secret.replace(" ", "").replace("-", "").strip().upper()
 
 
@@ -41,7 +43,8 @@ def generate_hotp_code(secret: str, counter: int, digits: int = 6) -> str:
 
 def format_otp_display(code: str) -> str:
     """Format code in monospace HTML tag without spaces for Telegram tap-to-copy."""
-    return f"<code>{code.strip()}</code>"
+    cleaned = str(code).strip() if code is not None else ""
+    return f"<code>{cleaned}</code>"
 
 
 def render_countdown_bar(remaining_seconds: int, total_period: int = 30) -> str:

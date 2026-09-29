@@ -213,3 +213,23 @@ async def test_handle_confirm_phrase_cancels_job_and_shows_menu(session_factory)
     assert call_kwargs["chat_id"] == 5555
     assert "Telegram 2FA Authenticator" in call_kwargs["text"]
 
+
+@pytest.mark.asyncio
+async def test_start_command_missing_db():
+    from handlers.start import handle_start_command
+
+    update = MagicMock()
+    update.effective_user.id = 12345
+    update.message = MagicMock()
+    update.message.reply_text = AsyncMock()
+    update.callback_query = None
+
+    context = MagicMock()
+    context.bot_data = {}  # session_factory is missing
+
+    await handle_start_command(update, context)
+
+    update.message.reply_text.assert_called_once()
+    assert "❌ Database tidak tersedia" in update.message.reply_text.call_args[0][0]
+
+

@@ -106,3 +106,14 @@ async def test_audit_logging_and_pagination(session: AsyncSession):
     logs_p3, total_pages = await get_user_logs(session, user.id, page=3, page_size=10)
     assert len(logs_p3) == 5
     assert logs_p3[-1].action == "action_0"
+
+    # Test edge cases: page_size=0 and negative numbers shouldn't raise ZeroDivisionError
+    logs_zero, total_pages_zero = await get_user_logs(session, user.id, page=0, page_size=0)
+    assert len(logs_zero) == 10
+    assert total_pages_zero == 3
+
+    # Out of bounds page clamped to total_pages
+    logs_oob, total_pages_oob = await get_user_logs(session, user.id, page=999, page_size=-5)
+    assert len(logs_oob) == 5
+    assert total_pages_oob == 3
+

@@ -286,9 +286,15 @@ def generate_recovery_phrase(language: str = "en") -> list[str]:
     return [secrets.choice(wordlist) for _ in range(12)]
 
 
-def normalize_phrase(phrase: list[str]) -> str:
+def normalize_phrase(phrase) -> str:
     """Normalize phrase to lowercase space-separated string."""
-    return " ".join(word.strip().lower() for word in phrase if word.strip())
+    if isinstance(phrase, str):
+        words = phrase.split()
+    elif not phrase:
+        return ""
+    else:
+        words = phrase
+    return " ".join(str(word).strip().lower() for word in words if str(word).strip())
 
 
 def hash_recovery_phrase(phrase: list[str]) -> str:

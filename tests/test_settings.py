@@ -384,3 +384,38 @@ async def test_settings_unregistered_and_mismatch_pin_length(session_factory, se
     assert "PIN: _ _ _ _" in call_text
 
 
+@pytest.mark.asyncio
+async def test_export_backup_start_empty_accounts(session_factory):
+    from handlers.settings import handle_export_backup_start
+
+    # Create registered user with no accounts
+    async with session_factory() as session:
+        user = User(
+            telegram_user_id=77777,
+            pin_hash="dummy_hash",
+            pin_hash_salt="dummy_salt",
+            kdf_salt="dummy_kdf",
+        )
+        session.add(user)
+        await session.commit()
+
+    update = MagicMock()
+    update.effective_user.id = 77777
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    await handle_export_backup_start(update, context)
+
+    query.edit_message_text.assert_called_once()
+    assert "Belum ada akun tersimpan untuk diekspor" in query.edit_message_text.call_args[0][0]
+    # Keypad buffer should not be created
+    assert "export_pin" not in context.user_data
+
+
+

@@ -355,7 +355,10 @@ async def handle_delete_account_pin_keypad(
         if not session_factory:
             clear_keypad_buffer(context.user_data, "del_pin")
             context.user_data.pop("del_acc_id", None)
-            await query.edit_message_text("❌ Database tidak tersedia.")
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+            ])
+            await query.edit_message_text("❌ Database tidak tersedia.", reply_markup=kb)
             return
 
         async with session_factory() as session:

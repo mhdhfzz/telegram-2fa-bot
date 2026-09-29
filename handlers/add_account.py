@@ -258,7 +258,10 @@ async def handle_manual_secret_input(update: Update, context: ContextTypes.DEFAU
         "Sekarang, masukkan nama **Label / Layanan** untuk akun ini:\n"
         "Contoh: `GitHub: alice` atau `Google Work`"
     )
-    sent_prompt = await update.message.reply_text(prompt_text, parse_mode=ParseMode.MARKDOWN)
+    cancel_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Batal", callback_data="menu:back_to_main")]
+    ])
+    sent_prompt = await update.message.reply_text(prompt_text, reply_markup=cancel_kb, parse_mode=ParseMode.MARKDOWN)
 
     # Automatically delete user message containing plaintext secret
     try:
@@ -289,7 +292,10 @@ async def handle_manual_label_input(update: Update, context: ContextTypes.DEFAUL
             if len(label) > 64
             else "Silakan masukkan nama label yang tidak kosong:"
         )
-        sent_err = await update.message.reply_text(err_msg, parse_mode=ParseMode.MARKDOWN)
+        cancel_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("❌ Batal", callback_data="menu:back_to_main")]
+        ])
+        sent_err = await update.message.reply_text(err_msg, reply_markup=cancel_kb, parse_mode=ParseMode.MARKDOWN)
         try:
             await update.message.delete()
         except Exception:

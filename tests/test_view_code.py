@@ -364,7 +364,9 @@ async def test_handle_refresh_code_hotp_account_not_found(session_factory, seed_
 
     await handle_refresh_code(update, context, 9999)
 
-    query.edit_message_text.assert_called_once_with("❌ Akun tidak ditemukan.")
+    call_args = query.edit_message_text.call_args
+    assert "❌ Akun tidak ditemukan." in call_args[0][0]
+    assert call_args[1]["reply_markup"] is not None
 
 
 @pytest.mark.asyncio

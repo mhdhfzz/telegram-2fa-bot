@@ -9,6 +9,7 @@ from crypto.cipher import encrypt_secret, decrypt_secret
 from crypto.recovery import (
     generate_recovery_phrase,
     hash_recovery_phrase,
+    normalize_phrase,
     verify_recovery_phrase,
 )
 
@@ -106,3 +107,10 @@ def test_recovery_phrase_generation_and_verification():
     assert len(phrase_id) == 12
     hash_id = hash_recovery_phrase(phrase_id)
     assert verify_recovery_phrase(phrase_id, hash_id) is True
+
+    # Test normalize_phrase with str, list, whitespace, empty, and None
+    assert normalize_phrase("  Alpha   BETA  gamma  ") == "alpha beta gamma"
+    assert normalize_phrase(["  Alpha ", "BETA  ", "gamma"]) == "alpha beta gamma"
+    assert normalize_phrase("") == ""
+    assert normalize_phrase(None) == ""
+

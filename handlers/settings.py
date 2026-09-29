@@ -439,6 +439,18 @@ async def handle_export_backup_start(update: Update, context: ContextTypes.DEFAU
                     parse_mode=ParseMode.MARKDOWN,
                 )
                 return
+            acc_stmt = select(Account).where(Account.user_id == user.id)
+            accounts_count = len((await session.execute(acc_stmt)).scalars().all())
+            if accounts_count == 0:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                ])
+                await query.edit_message_text(
+                    "📤 **Ekspor Cadangan**\n\nBelum ada akun tersimpan untuk diekspor.",
+                    reply_markup=kb,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
 
     clear_keypad_buffer(context.user_data, "export_pin")
     pin_len = get_pin_length(context)
@@ -539,7 +551,10 @@ async def handle_export_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                     "Ketik dan kirimkan **Passphrase** mandiri untuk mengenkripsi file cadangan ini.\n\n"
                     "⚠️ *PENTING: Jangan gunakan PIN login Anda! Buat passphrase yang kuat (minimal 4 karakter).*"
                 )
-                await query.edit_message_text(prompt_text, parse_mode=ParseMode.MARKDOWN)
+                cancel_kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Batal", callback_data="menu:settings")]
+                ])
+                await query.edit_message_text(prompt_text, reply_markup=cancel_kb, parse_mode=ParseMode.MARKDOWN)
                 if query.message:
                     context.user_data["prompt_msg_id"] = query.message.message_id
     else:
@@ -564,7 +579,13 @@ async def handle_export_passphrase_message(
 
     passphrase = (update.message.text or "").strip()
     if len(passphrase) < 4:
-        sent_err = await update.message.reply_text("❌ Passphrase terlalu pendek. Minimal 4 karakter:")
+        cancel_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Batal", callback_data="menu:settings")]
+        ])
+        sent_err = await update.message.reply_text(
+            "❌ Passphrase terlalu pendek. Minimal 4 karakter:",
+            reply_markup=cancel_kb,
+        )
         try:
             await update.message.delete()
         except Exception:
@@ -633,9 +654,14 @@ async def handle_export_passphrase_message(
                     f"Berisi {len(accounts_data)} akun terenkripsi AES-256-GCM.\n"
                     "Simpan file ini dan passphrase Anda di tempat aman terpisah."
                 )
+                back_kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")],
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")],
+                ])
                 await update.message.reply_document(
                     document=doc,
                     caption=caption,
+                    reply_markup=back_kb,
                     parse_mode=ParseMode.MARKDOWN,
                 )
 
@@ -819,7 +845,10 @@ async def handle_import_file_document(update: Update, context: ContextTypes.DEFA
         "File backup diterima! Sekarang, ketik dan kirimkan **Passphrase** "
         "yang Anda buat saat mengekspor file ini:"
     )
-    sent_prompt = await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    cancel_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔙 Batal", callback_data="menu:settings")]
+    ])
+    sent_prompt = await update.message.reply_text(text, reply_markup=cancel_kb, parse_mode=ParseMode.MARKDOWN)
 
     # Automatically delete uploaded document message
     try:
@@ -858,9 +887,13 @@ async def handle_import_passphrase_message(update: Update, context: ContextTypes
     try:
         accounts_data = import_accounts_backup(backup_bytes, passphrase)
     except Exception:
+        cancel_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Batal", callback_data="menu:settings")]
+        ])
         sent_err = await update.message.reply_text(
             "❌ **Passphrase salah atau file rusak!**\n\n"
-            "Gagal mendekripsi file cadangan. Silakan ketik ulang Passphrase yang benar:"
+            "Gagal mendekripsi file cadangan. Silakan ketik ulang Passphrase yang benar:",
+            reply_markup=cancel_kb,
         )
         try:
             await update.message.delete()

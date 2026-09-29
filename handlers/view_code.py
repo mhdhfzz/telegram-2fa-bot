@@ -169,7 +169,10 @@ async def handle_refresh_code(
                         stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
                         acc = (await session.execute(stmt)).scalars().first()
                         if not acc:
-                            await query.edit_message_text("❌ Akun tidak ditemukan.")
+                            kb = InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🔙 Daftar Akun", callback_data="menu:view_code")]
+                            ])
+                            await query.edit_message_text("❌ Akun tidak ditemukan.", reply_markup=kb)
                             return
                         code = generate_hotp_code(secret, acc.hotp_counter, digits=digits)
                         acc.hotp_counter += 1

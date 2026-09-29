@@ -47,15 +47,22 @@ async def handle_start_command(update: Update, context: ContextTypes.DEFAULT_TYP
     session_factory = context.bot_data.get("session_factory")
     user_id = update.effective_user.id
 
-    if session_factory:
-        async with session_factory() as session:
-            stmt = select(User).where(User.telegram_user_id == user_id)
-            res = await session.execute(stmt)
-            user = res.scalars().first()
-            if user:
-                from handlers.menu import show_main_menu
-                await show_main_menu(update, context)
-                return
+    if not session_factory:
+        text = "❌ Database tidak tersedia. Silakan hubungi admin atau coba lagi nanti."
+        if update.message:
+            await update.message.reply_text(text)
+        elif update.callback_query:
+            await update.callback_query.edit_message_text(text)
+        return
+
+    async with session_factory() as session:
+        stmt = select(User).where(User.telegram_user_id == user_id)
+        res = await session.execute(stmt)
+        user = res.scalars().first()
+        if user:
+            from handlers.menu import show_main_menu
+            await show_main_menu(update, context)
+            return
 
     context.user_data["setup_step"] = "pin1"
     context.user_data["setup_pin_1"] = ""
