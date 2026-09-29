@@ -251,6 +251,8 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
         return
 
     err_str = str(err)
+
+    # Benign Telegram API errors — message-level race conditions, safe to ignore
     benign_messages = (
         "Message is not modified",
         "Query is too old",
@@ -260,6 +262,25 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
         "Message to delete not found",
     )
     if any(msg in err_str for msg in benign_messages):
+        return
+
+    # Transient network/connection errors from aiohttp or Telegram servers.
+    # These are temporary blips that python-telegram-bot handles with automatic retry.
+    # Log at WARNING level only — no full traceback needed.
+    transient_network_messages = (
+        "stream reading error",
+        "unexpected EOF",
+        "ServerDisconnectedError",
+        "ClientConnectorError",
+        "TimeoutError",
+        "TimedOut",
+        "NetworkError",
+        "Connection reset by peer",
+        "Read timed out",
+        "aiohttp",
+    )
+    if any(msg in err_str for msg in transient_network_messages):
+        logger.warning("Transient network error (auto-retry expected): %s", err_str)
         return
 
     logger.error("Unhandled exception while processing update:", exc_info=err)
