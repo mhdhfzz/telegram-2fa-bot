@@ -306,7 +306,10 @@ async def handle_manual_label_input(update: Update, context: ContextTypes.DEFAUL
 
     secret = context.user_data.get("manual_secret")
     if not secret:
-        await update.message.reply_text("Terjadi kesalahan sesi. Silakan ulangi dari menu Tambah Akun.")
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+        ])
+        await update.message.reply_text("Terjadi kesalahan sesi. Silakan ulangi dari menu Tambah Akun.", reply_markup=kb)
         return
 
     if ":" in label:
@@ -399,8 +402,18 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
         session_factory = context.bot_data.get("session_factory")
         user_id = update.effective_user.id
 
-        if session_factory:
-            async with session_factory() as session:
+        if not session_factory:
+            clear_keypad_buffer(context.user_data, "add_acc_pin")
+            context.user_data.pop("pending_account", None)
+            context.user_data.pop("add_state", None)
+            context.user_data.pop("manual_secret", None)
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+            ])
+            await query.edit_message_text("❌ Database tidak tersedia.", reply_markup=kb)
+            return
+
+        async with session_factory() as session:
                 user_stmt = select(User).where(User.telegram_user_id == user_id)
                 user = (await session.execute(user_stmt)).scalars().first()
                 if not user:

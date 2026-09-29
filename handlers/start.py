@@ -163,17 +163,33 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
             phrase = generate_recovery_phrase(language="en")
             phrase_hash_val = hash_recovery_phrase(phrase)
 
-            if session_factory:
-                async with session_factory() as session:
-                    new_user = User(
-                        telegram_user_id=update.effective_user.id,
-                        pin_hash=pin_hash_val,
-                        pin_hash_salt=pin_salt,
-                        kdf_salt=kdf_salt,
-                        recovery_phrase_hash=phrase_hash_val,
-                    )
-                    session.add(new_user)
-                    await session.commit()
+            if not session_factory:
+                clear_keypad_buffer(context.user_data, "setup_pin_1")
+                clear_keypad_buffer(context.user_data, "setup_pin_2")
+                context.user_data.pop("setup_step", None)
+                await query.edit_message_text("❌ Database tidak tersedia.")
+                return
+
+            async with session_factory() as session:
+                stmt = select(User).where(User.telegram_user_id == update.effective_user.id)
+                existing = (await session.execute(stmt)).scalars().first()
+                if existing:
+                    clear_keypad_buffer(context.user_data, "setup_pin_1")
+                    clear_keypad_buffer(context.user_data, "setup_pin_2")
+                    context.user_data.pop("setup_step", None)
+                    from handlers.menu import show_main_menu
+                    await show_main_menu(update, context)
+                    return
+
+                new_user = User(
+                    telegram_user_id=update.effective_user.id,
+                    pin_hash=pin_hash_val,
+                    pin_hash_salt=pin_salt,
+                    kdf_salt=kdf_salt,
+                    recovery_phrase_hash=phrase_hash_val,
+                )
+                session.add(new_user)
+                await session.commit()
 
             clear_keypad_buffer(context.user_data, "setup_pin_1")
             clear_keypad_buffer(context.user_data, "setup_pin_2")

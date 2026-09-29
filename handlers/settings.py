@@ -113,18 +113,24 @@ async def handle_change_pin_start(update: Update, context: ContextTypes.DEFAULT_
         async with session_factory() as session:
             stmt = select(User).where(User.telegram_user_id == user_id)
             user = (await session.execute(stmt)).scalars().first()
-            if user:
-                is_locked, remaining_seconds = check_lockout(user)
-                if is_locked:
-                    mins, secs = divmod(remaining_seconds, 60)
-                    await query.edit_message_text(
-                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
-                        ]),
-                        parse_mode=ParseMode.MARKDOWN,
-                    )
-                    return
+            if not user:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
+                return
+
+            is_locked, remaining_seconds = check_lockout(user)
+            if is_locked:
+                mins, secs = divmod(remaining_seconds, 60)
+                await query.edit_message_text(
+                    f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                    ]),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
 
     context.user_data["ch_pin_step"] = "old"
     clear_keypad_buffer(context.user_data, "ch_pin_old")
@@ -164,8 +170,15 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
         if is_complete:
             session_factory = context.bot_data.get("session_factory")
             user_id = update.effective_user.id
-            if session_factory:
-                async with session_factory() as session:
+            if not session_factory:
+                clear_keypad_buffer(context.user_data, "ch_pin_old")
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                ])
+                await query.edit_message_text("❌ Database tidak tersedia.", reply_markup=kb)
+                return
+
+            async with session_factory() as session:
                     stmt = select(User).where(User.telegram_user_id == user_id)
                     user = (await session.execute(stmt)).scalars().first()
                     if not user:
@@ -288,7 +301,7 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                 text = (
                     "❌ **Konfirmasi PIN baru tidak cocok!**\n\n"
                     "Silakan masukkan PIN Baru kembali:\n\n"
-                    f"`{render_pin_display(0)}`"
+                    f"`{render_pin_display(0, max_length=pin_len)}`"
                 )
                 markup = build_keypad_keyboard("ch_pin_new1", show_cancel=True)
                 await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
@@ -298,35 +311,59 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             user_id = update.effective_user.id
             phrase = generate_recovery_phrase(language="en")
 
-            if session_factory:
-                async with session_factory() as session:
-                    stmt = select(User).where(User.telegram_user_id == user_id)
-                    user = (await session.execute(stmt)).scalars().first()
-                    if user:
-                        old_key = derive_encryption_key(old_pin, user.kdf_salt)
+            if not session_factory:
+                clear_keypad_buffer(context.user_data, "ch_pin_old")
+                clear_keypad_buffer(context.user_data, "ch_pin_new1")
+                clear_keypad_buffer(context.user_data, "ch_pin_new2")
+                context.user_data.pop("verified_old_pin", None)
+                context.user_data.pop("temp_new_pin", None)
+                context.user_data.pop("ch_pin_step", None)
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                ])
+                await query.edit_message_text("❌ Database tidak tersedia.", reply_markup=kb)
+                return
 
-                        new_kdf_salt = generate_salt()
-                        new_pin_salt = generate_salt()
-                        new_key = derive_encryption_key(new_pin, new_kdf_salt)
+            async with session_factory() as session:
+                stmt = select(User).where(User.telegram_user_id == user_id)
+                user = (await session.execute(stmt)).scalars().first()
+                if not user:
+                    clear_keypad_buffer(context.user_data, "ch_pin_old")
+                    clear_keypad_buffer(context.user_data, "ch_pin_new1")
+                    clear_keypad_buffer(context.user_data, "ch_pin_new2")
+                    context.user_data.pop("verified_old_pin", None)
+                    context.user_data.pop("temp_new_pin", None)
+                    context.user_data.pop("ch_pin_step", None)
+                    kb = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                    ])
+                    await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
+                    return
 
-                        acc_stmt = select(Account).where(Account.user_id == user.id)
-                        accounts = list((await session.execute(acc_stmt)).scalars().all())
+                old_key = derive_encryption_key(old_pin, user.kdf_salt)
 
-                        for acc in accounts:
-                            decrypted_secret = decrypt_secret(
-                                old_key, acc.secret_encrypted, acc.nonce
-                            )
-                            new_cipher, new_nonce = encrypt_secret(new_key, decrypted_secret)
-                            acc.secret_encrypted = new_cipher
-                            acc.nonce = new_nonce
+                new_kdf_salt = generate_salt()
+                new_pin_salt = generate_salt()
+                new_key = derive_encryption_key(new_pin, new_kdf_salt)
 
-                        user.kdf_salt = new_kdf_salt
-                        user.pin_hash_salt = new_pin_salt
-                        user.pin_hash = hash_pin(new_pin, new_pin_salt)
-                        user.recovery_phrase_hash = hash_recovery_phrase(phrase)
-                        await record_successful_pin_attempt(session, user)
-                        await log_action(session, user.id, "pin_change", True)
-                        await session.commit()
+                acc_stmt = select(Account).where(Account.user_id == user.id)
+                accounts = list((await session.execute(acc_stmt)).scalars().all())
+
+                for acc in accounts:
+                    decrypted_secret = decrypt_secret(
+                        old_key, acc.secret_encrypted, acc.nonce
+                    )
+                    new_cipher, new_nonce = encrypt_secret(new_key, decrypted_secret)
+                    acc.secret_encrypted = new_cipher
+                    acc.nonce = new_nonce
+
+                user.kdf_salt = new_kdf_salt
+                user.pin_hash_salt = new_pin_salt
+                user.pin_hash = hash_pin(new_pin, new_pin_salt)
+                user.recovery_phrase_hash = hash_recovery_phrase(phrase)
+                await record_successful_pin_attempt(session, user)
+                await log_action(session, user.id, "pin_change", True)
+                await session.commit()
 
             clear_keypad_buffer(context.user_data, "ch_pin_old")
             clear_keypad_buffer(context.user_data, "ch_pin_new1")
@@ -384,18 +421,24 @@ async def handle_export_backup_start(update: Update, context: ContextTypes.DEFAU
         async with session_factory() as session:
             stmt = select(User).where(User.telegram_user_id == user_id)
             user = (await session.execute(stmt)).scalars().first()
-            if user:
-                is_locked, remaining_seconds = check_lockout(user)
-                if is_locked:
-                    mins, secs = divmod(remaining_seconds, 60)
-                    await query.edit_message_text(
-                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
-                        ]),
-                        parse_mode=ParseMode.MARKDOWN,
-                    )
-                    return
+            if not user:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
+                return
+
+            is_locked, remaining_seconds = check_lockout(user)
+            if is_locked:
+                mins, secs = divmod(remaining_seconds, 60)
+                await query.edit_message_text(
+                    f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                    ]),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
 
     clear_keypad_buffer(context.user_data, "export_pin")
     pin_len = get_pin_length(context)
@@ -432,8 +475,15 @@ async def handle_export_pin_keypad(update: Update, context: ContextTypes.DEFAULT
         session_factory = context.bot_data.get("session_factory")
         user_id = update.effective_user.id
 
-        if session_factory:
-            async with session_factory() as session:
+        if not session_factory:
+            clear_keypad_buffer(context.user_data, "export_pin")
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+            ])
+            await query.edit_message_text("❌ Database tidak tersedia.", reply_markup=kb)
+            return
+
+        async with session_factory() as session:
                 stmt = select(User).where(User.telegram_user_id == user_id)
                 user = (await session.execute(stmt)).scalars().first()
                 if not user:
@@ -678,6 +728,34 @@ async def handle_import_backup_start(update: Update, context: ContextTypes.DEFAU
     if query:
         await query.answer()
 
+    session_factory = context.bot_data.get("session_factory")
+    user_id = update.effective_user.id
+    if session_factory:
+        async with session_factory() as session:
+            stmt = select(User).where(User.telegram_user_id == user_id)
+            user = (await session.execute(stmt)).scalars().first()
+            if not user:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                if query:
+                    await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
+                return
+
+            is_locked, remaining_seconds = check_lockout(user)
+            if is_locked:
+                mins, secs = divmod(remaining_seconds, 60)
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                ])
+                if query:
+                    await query.edit_message_text(
+                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                        reply_markup=kb,
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                return
+
     context.user_data["settings_state"] = "awaiting_import_file"
     text = (
         "📥 **Impor Cadangan (Backup)**\n\n"
@@ -858,8 +936,16 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
         session_factory = context.bot_data.get("session_factory")
         user_id = update.effective_user.id
 
-        if session_factory:
-            async with session_factory() as session:
+        if not session_factory:
+            clear_keypad_buffer(context.user_data, "import_pin")
+            context.user_data.pop("import_accounts_data", None)
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+            ])
+            await query.edit_message_text("❌ Database tidak tersedia.", reply_markup=kb)
+            return
+
+        async with session_factory() as session:
                 user_stmt = select(User).where(User.telegram_user_id == user_id)
                 user = (await session.execute(user_stmt)).scalars().first()
                 if not user:

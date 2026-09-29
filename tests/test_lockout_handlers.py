@@ -149,6 +149,14 @@ async def test_settings_export_backup_blocks_locked_user(setup_locked_env):
 async def test_settings_import_backup_blocks_locked_user(setup_locked_env):
     session_factory, user_id, _ = setup_locked_env
 
+    # 1. Start import blocks locked user
+    from handlers.settings import handle_import_backup_start
+    update_start, context_start = make_mock_update_and_context(session_factory, user_id, "settings:import")
+    await handle_import_backup_start(update_start, context_start)
+    start_text = update_start.callback_query.edit_message_text.call_args[0][0]
+    assert "Akun Terkunci" in start_text
+
+    # 2. Keypad submission blocks locked user
     update, context = make_mock_update_and_context(session_factory, user_id, "import_pin:key:submit")
     context.user_data["import_pin"] = "123456"
     context.user_data["import_accounts_data"] = [{"label": "Imported", "secret": "JBSWY3DPEHPK3PXP"}]
@@ -156,3 +164,4 @@ async def test_settings_import_backup_blocks_locked_user(setup_locked_env):
     await handle_import_pin_keypad(update, context)
     call_text = update.callback_query.edit_message_text.call_args[0][0]
     assert "Akun Terkunci" in call_text
+

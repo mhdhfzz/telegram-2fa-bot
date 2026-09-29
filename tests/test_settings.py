@@ -332,3 +332,55 @@ async def test_import_file_validation_extension_and_size():
     assert "Ukuran file terlalu besar" in args[0]
     assert kwargs.get("reply_markup") is not None
 
+
+@pytest.mark.asyncio
+async def test_settings_unregistered_and_mismatch_pin_length(session_factory, seed_user_with_secret):
+    from handlers.settings import (
+        handle_change_pin_start,
+        handle_export_backup_start,
+        handle_import_backup_start,
+    )
+
+    update = MagicMock()
+    update.effective_user.id = 9999
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    # Case 1: Change PIN start unregistered
+    await handle_change_pin_start(update, context)
+    assert "❌ Pengguna tidak terdaftar." in query.edit_message_text.call_args[0][0]
+
+    # Case 2: Export backup start unregistered
+    await handle_export_backup_start(update, context)
+    assert "❌ Pengguna tidak terdaftar." in query.edit_message_text.call_args[0][0]
+
+    # Case 3: Import backup start unregistered
+    await handle_import_backup_start(update, context)
+    assert "❌ Pengguna tidak terdaftar." in query.edit_message_text.call_args[0][0]
+
+    # Case 4: PIN confirmation mismatch with 4-digit PIN setting
+    user, _ = seed_user_with_secret
+    update.effective_user.id = user.telegram_user_id
+    context.bot_data["settings"] = MagicMock(pin_length=4)
+    context.user_data = {
+        "ch_pin_step": "new2",
+        "temp_new_pin": "1234",
+        "verified_old_pin": "111222",
+    }
+    # Enter mismatched 4-digit PIN "9999"
+    for digit in "9999":
+        query.data = f"ch_pin_new2:key:{digit}"
+        await handle_change_pin_keypad(update, context)
+
+    call_text = query.edit_message_text.call_args[0][0]
+    assert "Konfirmasi PIN baru tidak cocok!" in call_text
+    # Verify it displays 4 underscores, not 6
+    assert "PIN: _ _ _ _" in call_text
+
+
