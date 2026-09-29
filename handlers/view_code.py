@@ -287,6 +287,8 @@ async def handle_view_code_menu(
         text = f"{emoji} {acc.label}{fav}"
         buttons.append([InlineKeyboardButton(text, callback_data=f"view:select:{acc.id}")])
 
+    if not favorites_only and accounts:
+        buttons.insert(0, [InlineKeyboardButton("👁️ Lihat Semua Kode Sekaligus", callback_data="menu:view_all_codes")])
     if not favorites_only and len(accounts) > 8:
         buttons.insert(0, [InlineKeyboardButton("🔍 Cari Akun", callback_data="menu:search_account")])
 

@@ -10,11 +10,14 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🔑 Lihat Kode", callback_data="menu:view_code"),
         ],
         [
+            InlineKeyboardButton("👁️ Semua Kode", callback_data="menu:view_all_codes"),
             InlineKeyboardButton("🔍 Cari Akun", callback_data="menu:search_account"),
-            InlineKeyboardButton("⭐ Favorit", callback_data="menu:favorite_accounts"),
         ],
         [
+            InlineKeyboardButton("⭐ Favorit", callback_data="menu:favorite_accounts"),
             InlineKeyboardButton("✏️ Kelola Akun", callback_data="menu:manage_account"),
+        ],
+        [
             InlineKeyboardButton("⚙️ Pengaturan", callback_data="menu:settings"),
         ],
     ]
@@ -40,6 +43,7 @@ def clear_user_workflow_state(user_data: dict) -> None:
         "prompt_msg_id",
         "view_account_id",
         "active_view",
+        "active_view_all",
         "verified_old_pin",
         "temp_new_pin",
         "ch_pin_step",
@@ -52,6 +56,7 @@ def clear_user_workflow_state(user_data: dict) -> None:
         "setup_pin_2",
         "add_acc_pin",
         "view_pin",
+        "view_all_pin",
         "del_pin",
         "ch_pin_old",
         "ch_pin_new1",
@@ -78,6 +83,13 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             from handlers.view_code import cancel_view_code_jobs
             cancel_view_code_jobs(context, update.effective_chat.id, mid)
 
+    active_view_all = context.user_data.get("active_view_all")
+    if active_view_all and isinstance(active_view_all, dict) and update.effective_chat:
+        mid = active_view_all.get("message_id")
+        if mid:
+            from handlers.view_all_codes import cancel_view_all_jobs
+            cancel_view_all_jobs(context, update.effective_chat.id, mid)
+
     clear_user_workflow_state(context.user_data)
 
     if update.callback_query:
@@ -90,6 +102,8 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if query.message and update.effective_chat:
             from handlers.view_code import cancel_view_code_jobs
             cancel_view_code_jobs(context, update.effective_chat.id, query.message.message_id)
+            from handlers.view_all_codes import cancel_view_all_jobs
+            cancel_view_all_jobs(context, update.effective_chat.id, query.message.message_id)
 
         try:
             await query.edit_message_text(

@@ -247,3 +247,59 @@ async def test_edit_account_label_validation(session_factory, seed_user_and_acco
     args, _ = msg_update.message.reply_text.call_args
     assert "terlalu panjang" in args[0]
 
+
+def test_main_menu_keyboard_has_view_all_button():
+    from handlers.menu import get_main_menu_keyboard
+
+    markup = get_main_menu_keyboard()
+    all_callbacks = [
+        btn.callback_data for row in markup.inline_keyboard for btn in row
+    ]
+    assert "menu:view_all_codes" in all_callbacks
+    # Verify button text
+    view_all_btn = next(
+        btn for row in markup.inline_keyboard for btn in row if btn.callback_data == "menu:view_all_codes"
+    )
+    assert "👁️ Semua Kode" in view_all_btn.text
+
+
+def test_clear_user_workflow_state_clears_view_all():
+    from handlers.menu import clear_user_workflow_state
+
+    user_data = {
+        "active_view_all": {"dummy": "data"},
+        "view_all_pin": "123",
+        "some_other_key": 42,
+    }
+    clear_user_workflow_state(user_data)
+    assert "active_view_all" not in user_data
+    assert "view_all_pin" not in user_data
+    assert user_data["some_other_key"] == 42
+
+
+@pytest.mark.asyncio
+async def test_view_code_menu_contains_view_all_button(session_factory, seed_user_and_accounts):
+    from handlers.view_code import handle_view_code_menu
+
+    user_id = seed_user_and_accounts
+    update = MagicMock()
+    update.effective_user.id = 101
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    await handle_view_code_menu(update, context)
+
+    query.edit_message_text.assert_called_once()
+    markup = query.edit_message_text.call_args[1]["reply_markup"]
+    callbacks = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+    assert "menu:view_all_codes" in callbacks
+    btn = next(btn for row in markup.inline_keyboard for btn in row if btn.callback_data == "menu:view_all_codes")
+    assert "👁️ Lihat Semua Kode Sekaligus" in btn.text
+
+
