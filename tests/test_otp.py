@@ -50,11 +50,11 @@ def test_countdown_bar():
 
 
 def test_parse_otpauth_uri():
-    uri_totp = "otpauth://totp/GitHub:zifahx?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&digits=6&period=30"
+    uri_totp = "otpauth://totp/GitHub:testuser?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&digits=6&period=30"
     parsed = parse_otpauth_uri(uri_totp)
     assert parsed["secret"] == "JBSWY3DPEHPK3PXP"
     assert parsed["issuer"] == "GitHub"
-    assert parsed["label"] == "zifahx"
+    assert parsed["label"] == "testuser"
     assert parsed["type"] == "totp"
     assert parsed["digits"] == 6
     assert parsed["period"] == 30

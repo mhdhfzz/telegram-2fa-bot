@@ -341,3 +341,19 @@ async def test_view_code_menu_contains_view_all_button(session_factory, seed_use
     assert "👁️ Lihat Semua Kode Sekaligus" in btn.text
 
 
+def test_get_main_menu_keyboard_url_sanitization():
+    from handlers.menu import get_main_menu_keyboard
+
+    # Test bare domain without https://
+    kb = get_main_menu_keyboard(mini_app_url="bot.example.com")
+    btn = kb.inline_keyboard[0][0]
+    assert btn.web_app is not None
+    assert btn.web_app.url == "https://bot.example.com"
+
+    # Test http:// domain
+    kb_http = get_main_menu_keyboard(mini_app_url="http://insecure.site.com")
+    btn_http = kb_http.inline_keyboard[0][0]
+    assert btn_http.web_app.url == "https://insecure.site.com"
+
+
+

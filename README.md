@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram_Bot_API-v20+-2CA5E0.svg?logo=telegram&logoColor=white)](https://python-telegram-bot.org/)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM%20%7C%20Argon2id-green.svg)](https://cryptography.io/)
-[![Tests](https://img.shields.io/badge/Tests-104%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
+[![Tests](https://img.shields.io/badge/Tests-108%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
 [![Demo Bot](https://img.shields.io/badge/Demo_Bot-@VexAuthKey__bot-26A5E4.svg?logo=telegram&logoColor=white)](https://t.me/VexAuthKey_bot)
 
 Bot Telegram yang berfungsi sebagai aplikasi *two-factor authenticator* mandiri (seperti Google Authenticator / Authy), dihosting di VPS menggunakan Python. Bot mendukung multi-tenant dengan data antar-pengguna terisolasi penuh dan dienkripsi kuat menggunakan PIN pribadi masing-masing user.
@@ -148,16 +148,75 @@ Buka Telegram, cari bot Anda atau uji melalui bot demo [@VexAuthKey_bot](https:/
 
 ---
 
-## 📱 Panduan Konfigurasi Telegram Mini App & BotFather
+---
 
-Untuk menghubungkan Telegram Mini App dengan tombol menu BotFather (`/setmenubutton` atau `/newapp`) beserta setup HTTPS reverse proxy (Nginx / Cloudflare Tunnel), silakan baca panduan lengkap:
+## 🤖 Konfigurasi Profil & Tampilan Bot di @BotFather
+
+Untuk memberikan pengalaman pengguna yang profesional dan informatif, konfigurasikan profil bot Anda melalui [@BotFather](https://t.me/BotFather):
+
+### 1. Deskripsi Layar Awal (`/setdescription`)
+Deskripsi ini muncul di layar kosong sebelum pengguna pertama kali menekan tombol **Start**:
+1. Kirim `/setdescription` ke [@BotFather](https://t.me/BotFather) dan pilih bot Anda.
+2. Kirim template teks berikut:
+   ```text
+   🛡️ Telegram 2FA Authenticator Bot mandiri dengan enkripsi tingkat tinggi (AES-256-GCM + Argon2id).
+
+   ✨ Fitur Utama:
+   • 📱 Mini App interaktif (Liquid Glass & Neumorphism)
+   • 🎨 200+ logo resmi Simple Icons (Google, GitHub, Discord, Steam, AWS, dll.)
+   • 🔐 Zero Master Key & Zero Telegram Cloud Storage
+   • 🔢 Keypad inline interaktif (PIN aman tersamar)
+   • ⏱️ Auto-delete pesan sensitif 90 detik
+
+   Ketik /start untuk mulai mengamankan akun Anda!
+   ```
+
+### 2. Teks Profil / About (`/setabouttext`)
+Teks singkat yang muncul saat profil bot dibuka:
+1. Kirim `/setabouttext` dan pilih bot Anda.
+2. Kirim teks berikut:
+   ```text
+   2FA Authenticator (TOTP/HOTP) dengan Mini App modern & integrasi Simple Icons.
+   ```
+
+### 3. Foto Profil Bot (`/setuserpic`)
+1. Kirim `/setuserpic` dan pilih bot Anda.
+2. Unggah gambar logo / perisai keamanan 2FA berukuran persegi (disarankan 512x512 pixel).
+
+### 4. Daftar Perintah Bot (`/setcommands`)
+Daftar perintah yang muncul saat pengguna mengetik `/`:
+1. Kirim `/setcommands` dan pilih bot Anda.
+2. Kirim daftar perintah berikut:
+   ```text
+   start - 🚀 Buka Menu Utama & Registrasi PIN
+   menu - 📋 Tampilkan Menu Navigasi Dashboard
+   miniapp - 📱 Buka Telegram Mini App
+   help - ℹ️ Bantuan & Panduan Penggunaan
+   cancel - ❌ Batalkan operasi aktif
+   ```
+
+### 5. Tombol Menu Mini App (`/setmenubutton`)
+Tombol pintasan cepat di sudut kiri bawah chat pengguna:
+1. Kirim `/setmenubutton` dan pilih bot Anda.
+2. Masukkan URL HTTPS domain Anda: `https://2fa.domainanda.com`
+3. Masukkan nama tombol: `📱 Buka 2FA`
+
+### 6. Dedicated Mini App (`/newapp`)
+Jika ingin tautan langsung seperti `t.me/UsernameBot/app`:
+1. Kirim `/newapp` -> Pilih bot Anda.
+2. **Title**: `2FA Authenticator`
+3. **Description**: `Aplikasi 2FA Authenticator aman & modern dengan integrasi Simple Icons.`
+4. Unggah foto cover (640x360 px), kirim `/empty` untuk demo gif, dan masukkan URL HTTPS Mini App Anda.
+5. Tentukan short name (misal: `app`).
+
+Panduan lengkap mengenai setup HTTPS reverse proxy Nginx dan SSL Certbot tersedia di:
 📖 **[docs/BOTFATHER_MINI_APP_GUIDE.md](docs/BOTFATHER_MINI_APP_GUIDE.md)**
 
 ---
 
 ## 🧪 Pengujian Otomatis (Testing)
 
-Proyek ini memiliki **104 unit dan integration test** yang mencakup seluruh lapisan sistem:
+Proyek ini memiliki **108 unit dan integration test** yang mencakup seluruh lapisan sistem:
 
 ```bash
 pytest -v
@@ -168,21 +227,21 @@ Hasil pengujian:
 tests/test_add_account.py .....                            [  5%]
 tests/test_backup.py .....                                 [ 10%]
 tests/test_bot_smoke.py ....                               [ 14%]
-tests/test_config.py ...                                   [ 17%]
-tests/test_crypto.py .......                               [ 24%]
-tests/test_db.py ...                                       [ 27%]
-tests/test_keypad.py ......                                [ 33%]
-tests/test_lockout.py ..                                   [ 35%]
-tests/test_lockout_handlers.py .....                       [ 40%]
-tests/test_menu_handlers.py ...........                    [ 50%]
-tests/test_mini_app.py ....                                [ 54%]
-tests/test_otp.py ..........                               [ 63%]
-tests/test_settings.py ........                            [ 71%]
-tests/test_start_handler.py ......                         [ 77%]
-tests/test_view_all_codes.py ...............               [ 91%]
+tests/test_config.py ....                                  [ 18%]
+tests/test_crypto.py .......                               [ 25%]
+tests/test_db.py ...                                       [ 28%]
+tests/test_keypad.py ......                                [ 34%]
+tests/test_lockout.py ..                                   [ 36%]
+tests/test_lockout_handlers.py .....                       [ 41%]
+tests/test_menu_handlers.py ............                   [ 52%]
+tests/test_mini_app.py ......                              [ 58%]
+tests/test_otp.py ..........                               [ 67%]
+tests/test_settings.py ........                            [ 75%]
+tests/test_start_handler.py ......                         [ 81%]
+tests/test_view_all_codes.py ...............               [ 95%]
 tests/test_view_code.py ..........                         [100%]
 
-============================ 104 passed in 24.48s =============================
+============================ 108 passed in 27.92s =============================
 ```
 
 ---

@@ -6,7 +6,18 @@ from config import get_settings
 
 
 def get_main_menu_keyboard(mini_app_url: Optional[str] = None) -> InlineKeyboardMarkup:
-    url = mini_app_url or get_settings().mini_app_url
+    raw_url = mini_app_url or get_settings().mini_app_url
+    url = ""
+    if raw_url:
+        val = str(raw_url).strip()
+        if val:
+            if val.startswith("http://"):
+                url = "https://" + val[7:]
+            elif not val.startswith("https://"):
+                url = f"https://{val}"
+            else:
+                url = val
+
     keyboard = []
 
     # Mini App Button

@@ -38,3 +38,22 @@ def test_get_settings_reads_env(monkeypatch):
     settings = get_settings()
     assert settings.bot_token == "env_token_xyz"
     assert settings.db_path == "env_test.db"
+
+
+def test_mini_app_url_normalization():
+    # Bare domain without scheme
+    s1 = Settings(_env_file=None, bot_token="tok", mini_app_url="bot.example.com")
+    assert s1.mini_app_url == "https://bot.example.com"
+
+    # http scheme
+    s2 = Settings(_env_file=None, bot_token="tok", mini_app_url="http://mybot.com")
+    assert s2.mini_app_url == "https://mybot.com"
+
+    # already https
+    s3 = Settings(_env_file=None, bot_token="tok", mini_app_url="https://secure.bot.com")
+    assert s3.mini_app_url == "https://secure.bot.com"
+
+    # empty string
+    s4 = Settings(_env_file=None, bot_token="tok", mini_app_url="")
+    assert s4.mini_app_url == ""
+

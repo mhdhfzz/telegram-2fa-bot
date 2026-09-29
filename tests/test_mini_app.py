@@ -321,3 +321,120 @@ async def test_mini_app_dynamic_pin_length(monkeypatch):
         await engine.dispose()
         get_settings.cache_clear()
 
+
+@pytest.mark.asyncio
+async def test_mini_app_advanced_chat_features():
+    """Verify HOTP next counter, Edit account, Change Master PIN, Audit Logs, and Backup export in Mini App."""
+    bot_token = "123456:ADVANCED_FEATURES_TOKEN"
+    engine = get_async_engine(":memory:")
+    session_factory = get_session_factory(engine)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    pin = "112233"
+    pin_salt = generate_salt()
+    kdf_salt = generate_salt()
+    pin_hash = hash_pin(pin, pin_salt)
+    user_id_tg = 555666777
+
+    async with session_factory() as session:
+        user = User(
+            telegram_user_id=user_id_tg,
+            pin_hash=pin_hash,
+            pin_hash_salt=pin_salt,
+            kdf_salt=kdf_salt,
+            failed_pin_attempts=0,
+        )
+        session.add(user)
+        await session.commit()
+
+    session_mgr = MiniAppSessionManager(default_ttl_seconds=300)
+    app = create_mini_app(bot_token, session_factory, session_mgr)
+
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+
+    try:
+        init_data = generate_mock_init_data(bot_token, {"id": user_id_tg, "first_name": "AdvUser"})
+        resp_auth = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": pin})
+        assert resp_auth.status == 200
+        token = (await resp_auth.json())["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Add HOTP account
+        hotp_payload = {
+            "label": "My Router",
+            "issuer": "OpenWRT",
+            "secret": "JBSWY3DPEHPK3PXP",
+            "type": "hotp",
+            "digits": 6,
+        }
+        resp_add = await client.post("/api/accounts", json=hotp_payload, headers=headers)
+        assert resp_add.status == 201
+        acc_data = (await resp_add.json())["account"]
+        acc_id = acc_data["id"]
+
+        # 2. Advance HOTP counter (+1)
+        resp_next = await client.post(f"/api/accounts/{acc_id}/hotp_next", headers=headers)
+        assert resp_next.status == 200
+        data_next = await resp_next.json()
+        assert data_next["success"] is True
+        assert data_next["hotp_counter"] == 1
+        assert len(data_next["code"]) == 6
+
+        # 3. Edit account label & issuer
+        resp_edit = await client.put(f"/api/accounts/{acc_id}", json={"label": "Office Router", "issuer": "Google"}, headers=headers)
+        assert resp_edit.status == 200
+        data_edit = await resp_edit.json()
+        assert data_edit["account"]["label"] == "Office Router"
+        assert data_edit["account"]["issuer"] == "Google"
+        assert data_edit["account"]["slug"] == "google"
+
+        # 4. View Audit Logs
+        resp_logs = await client.get("/api/settings/logs", headers=headers)
+        assert resp_logs.status == 200
+        data_logs = await resp_logs.json()
+        assert len(data_logs["logs"]) >= 1
+        actions = [l["action"] for l in data_logs["logs"]]
+        assert "miniapp_hotp_next" in actions
+        assert "miniapp_edit_account" in actions
+
+        # 5. Export Backup
+        resp_backup = await client.get("/api/settings/backup", headers=headers)
+        assert resp_backup.status == 200
+        data_backup = await resp_backup.json()
+        assert data_backup["total"] == 1
+        assert data_backup["accounts"][0]["label"] == "Office Router"
+        assert data_backup["accounts"][0]["secret"] == "JBSWY3DPEHPK3PXP"
+
+        # 6. Change Master PIN
+        # Wrong old pin
+        resp_chg_fail = await client.post("/api/settings/change_pin", json={"old_pin": "999999", "new_pin": "654321"}, headers=headers)
+        assert resp_chg_fail.status == 401
+
+        # Correct old pin
+        resp_chg_ok = await client.post("/api/settings/change_pin", json={"old_pin": pin, "new_pin": "654321"}, headers=headers)
+        assert resp_chg_ok.status == 200
+
+        # Verify old pin fails on login, new pin succeeds
+        resp_old_login = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": pin})
+        assert resp_old_login.status == 401
+
+        resp_new_login = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": "654321"})
+        assert resp_new_login.status == 200
+        new_token = (await resp_new_login.json())["token"]
+
+        # Verify accounts still decrypt cleanly with new pin
+        resp_verify_accs = await client.get("/api/accounts", headers={"Authorization": f"Bearer {new_token}"})
+        assert resp_verify_accs.status == 200
+        accs = (await resp_verify_accs.json())["accounts"]
+        assert len(accs) == 1
+        assert accs[0]["secret"] == "JBSWY3DPEHPK3PXP"
+
+    finally:
+        await client.close()
+        await engine.dispose()
+
+

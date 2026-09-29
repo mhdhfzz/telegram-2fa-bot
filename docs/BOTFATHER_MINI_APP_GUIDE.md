@@ -131,6 +131,50 @@ Jika Anda ingin memiliki direct link seperti `t.me/UsernameBot/app` atau tombol 
 
 ---
 
+### Metode 3: Pengaturan Profil & Informasi Lengkap Bot
+
+Agar bot Anda memiliki tampilan yang menarik dan profesional, atur perintah berikut di BotFather:
+
+1. **Deskripsi Awal Chat (`/setdescription`)**:
+   - Kirim `/setdescription` -> Pilih bot Anda.
+   - Kirim teks:
+     ```text
+     🛡️ Telegram 2FA Authenticator Bot mandiri dengan enkripsi tingkat tinggi (AES-256-GCM + Argon2id).
+
+     ✨ Fitur Utama:
+     • 📱 Mini App interaktif (Liquid Glass & Neumorphism)
+     • 🎨 200+ logo resmi Simple Icons (Google, GitHub, Discord, Steam, AWS, dll.)
+     • 🔐 Zero Master Key & Zero Telegram Cloud Storage
+     • 🔢 Keypad inline interaktif (PIN aman tersamar)
+     • ⏱️ Auto-delete pesan sensitif 90 detik
+
+     Ketik /start untuk mulai mengamankan akun Anda!
+     ```
+
+2. **Tentang Bot / Info Profil (`/setabouttext`)**:
+   - Kirim `/setabouttext` -> Pilih bot Anda.
+   - Kirim teks:
+     ```text
+     Aplikasi 2FA Authenticator mandiri (TOTP/HOTP) terenkripsi AES-256-GCM dengan Mini App modern & integrasi Simple Icons.
+     ```
+
+3. **Foto Profil Bot (`/setuserpic`)**:
+   - Kirim `/setuserpic` -> Pilih bot Anda.
+   - Unggah gambar logo persegi (disarankan resolusi 512x512 pixel).
+
+4. **Daftar Menu Command (`/setcommands`)**:
+   - Kirim `/setcommands` -> Pilih bot Anda.
+   - Kirim list berikut:
+     ```text
+     start - 🚀 Buka Menu Utama & Registrasi PIN
+     menu - 📋 Tampilkan Menu Navigasi Dashboard
+     miniapp - 📱 Buka Telegram Mini App
+     help - ℹ️ Bantuan & Panduan Penggunaan
+     cancel - ❌ Batalkan operasi aktif
+     ```
+
+---
+
 ## ⚙️ Langkah 3: Konfigurasi File `.env` Bot
 
 Buka file `.env` di folder bot Anda dan sesuaikan konfigurasi berikut:

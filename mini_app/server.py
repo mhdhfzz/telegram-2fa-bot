@@ -1,4 +1,5 @@
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -8,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from config import get_settings
 from crypto.cipher import decrypt_secret, encrypt_secret
-from crypto.kdf import derive_encryption_key, verify_pin
-from db.models import Account, User
+from crypto.kdf import derive_encryption_key, generate_salt, hash_pin, verify_pin
+from db.models import Account, AccessLog, User
 from mini_app.crypto_utils import MiniAppSessionManager, validate_telegram_init_data
 from services.icon_service import get_issuer_info
 from services.lockout_service import (
@@ -377,6 +378,196 @@ class MiniAppHandler:
             await log_action(session, user_id, "miniapp_delete_account", success=True, account_id=None)
             return json_response({"success": True})
 
+    async def handle_hotp_next(self, request: web.Request) -> web.Response:
+        """Increment HOTP counter and return the next code."""
+        client_session = self._extract_session(request)
+        if not client_session:
+            return json_response({"error": "Unauthorized"}, status=401)
+
+        acc_id = int(request.match_info["id"])
+        user_id = client_session["user_id"]
+        derived_key = client_session["derived_key"]
+
+        async with self.session_factory() as session:
+            stmt = select(Account).where(Account.id == acc_id, Account.user_id == user_id)
+            acc = (await session.execute(stmt)).scalars().first()
+            if not acc:
+                return json_response({"error": "Account not found"}, status=404)
+            if acc.type != "hotp":
+                return json_response({"error": "Account is not HOTP"}, status=400)
+
+            acc.hotp_counter += 1
+            decrypted_secret = decrypt_secret(derived_key, acc.secret_encrypted, acc.nonce)
+            new_code = generate_hotp_code(decrypted_secret, acc.hotp_counter, acc.digits)
+            await session.commit()
+            await log_action(session, user_id, "miniapp_hotp_next", success=True, account_id=acc.id)
+
+            return json_response({
+                "success": True,
+                "hotp_counter": acc.hotp_counter,
+                "code": new_code,
+            })
+
+    async def handle_update_account(self, request: web.Request) -> web.Response:
+        """Update account label and issuer."""
+        client_session = self._extract_session(request)
+        if not client_session:
+            return json_response({"error": "Unauthorized"}, status=401)
+
+        acc_id = int(request.match_info["id"])
+        user_id = client_session["user_id"]
+        try:
+            body = await request.json()
+        except Exception:
+            return json_response({"error": "Invalid JSON body"}, status=400)
+
+        new_label = str(body.get("label", "")).strip()
+        new_issuer = str(body.get("issuer", "")).strip()
+        if not new_label:
+            return json_response({"error": "Label cannot be empty"}, status=400)
+
+        async with self.session_factory() as session:
+            stmt = select(Account).where(Account.id == acc_id, Account.user_id == user_id)
+            acc = (await session.execute(stmt)).scalars().first()
+            if not acc:
+                return json_response({"error": "Account not found"}, status=404)
+
+            acc.label = new_label
+            acc.issuer = new_issuer or None
+            await session.commit()
+            await log_action(session, user_id, "miniapp_edit_account", success=True, account_id=acc.id)
+            meta = get_issuer_info(acc.issuer)
+            return json_response({
+                "success": True,
+                "account": {
+                    "id": acc.id,
+                    "label": acc.label,
+                    "issuer": acc.issuer or "",
+                    "emoji": meta["emoji"],
+                    "slug": meta["slug"],
+                    "icon_url": meta["icon_url"],
+                },
+            })
+
+    async def handle_change_pin(self, request: web.Request) -> web.Response:
+        """Change Master PIN from within Mini App and re-encrypt all credentials."""
+        client_session = self._extract_session(request)
+        if not client_session:
+            return json_response({"error": "Unauthorized"}, status=401)
+
+        user_id = client_session["user_id"]
+        derived_key = client_session["derived_key"]
+        try:
+            body = await request.json()
+        except Exception:
+            return json_response({"error": "Invalid JSON body"}, status=400)
+
+        old_pin = str(body.get("old_pin", "")).strip()
+        new_pin = str(body.get("new_pin", "")).strip()
+        settings = get_settings()
+
+        if len(new_pin) != settings.pin_length:
+            return json_response({
+                "success": False,
+                "error": f"PIN baru harus terdiri dari {settings.pin_length} digit.",
+            }, status=400)
+
+        async with self.session_factory() as session:
+            stmt = select(User).where(User.id == user_id)
+            user = (await session.execute(stmt)).scalars().first()
+            if not user:
+                return json_response({"error": "User not found"}, status=404)
+
+            if not verify_pin(old_pin, user.pin_hash_salt, user.pin_hash):
+                await log_action(session, user_id, "miniapp_change_pin", success=False)
+                return json_response({"success": False, "error": "PIN lama salah."}, status=401)
+
+            new_pin_salt = generate_salt()
+            new_kdf_salt = generate_salt()
+            new_pin_hash = hash_pin(new_pin, new_pin_salt)
+            new_derived_key = derive_encryption_key(new_pin, new_kdf_salt)
+
+            acc_stmt = select(Account).where(Account.user_id == user_id)
+            accounts = (await session.execute(acc_stmt)).scalars().all()
+            for acc in accounts:
+                secret = decrypt_secret(derived_key, acc.secret_encrypted, acc.nonce)
+                new_enc, new_nonce = encrypt_secret(new_derived_key, secret)
+                acc.secret_encrypted = new_enc
+                acc.nonce = new_nonce
+
+            user.pin_hash = new_pin_hash
+            user.pin_hash_salt = new_pin_salt
+            user.kdf_salt = new_kdf_salt
+            await session.commit()
+            await log_action(session, user_id, "miniapp_change_pin", success=True)
+
+            client_session["derived_key"] = new_derived_key
+            return json_response({"success": True, "message": "Master PIN berhasil diperbarui."})
+
+    async def handle_get_audit_logs(self, request: web.Request) -> web.Response:
+        """Fetch latest 15 audit logs for the user."""
+        client_session = self._extract_session(request)
+        if not client_session:
+            return json_response({"error": "Unauthorized"}, status=401)
+
+        user_id = client_session["user_id"]
+        async with self.session_factory() as session:
+            stmt = (
+                select(AccessLog)
+                .where(AccessLog.user_id == user_id)
+                .order_by(AccessLog.created_at.desc())
+                .limit(15)
+            )
+            logs = (await session.execute(stmt)).scalars().all()
+            results = [
+                {
+                    "id": l.id,
+                    "action": l.action,
+                    "success": l.success,
+                    "timestamp": l.created_at.strftime("%d/%m/%Y %H:%M:%S") if l.created_at else "",
+                }
+                for l in logs
+            ]
+            return json_response({"logs": results})
+
+    async def handle_export_backup(self, request: web.Request) -> web.Response:
+        """Export accounts backup as JSON."""
+        client_session = self._extract_session(request)
+        if not client_session:
+            return json_response({"error": "Unauthorized"}, status=401)
+
+        user_id = client_session["user_id"]
+        derived_key = client_session["derived_key"]
+
+        async with self.session_factory() as session:
+            stmt = select(Account).where(Account.user_id == user_id).order_by(Account.created_at.asc())
+            accounts = (await session.execute(stmt)).scalars().all()
+
+            backup_items = []
+            for acc in accounts:
+                try:
+                    sec = decrypt_secret(derived_key, acc.secret_encrypted, acc.nonce)
+                except Exception:
+                    sec = ""
+                backup_items.append({
+                    "label": acc.label,
+                    "issuer": acc.issuer or "",
+                    "secret": sec,
+                    "type": acc.type,
+                    "digits": acc.digits,
+                    "period": acc.period,
+                    "hotp_counter": acc.hotp_counter,
+                    "is_favorite": acc.is_favorite,
+                })
+
+            await log_action(session, user_id, "miniapp_export_backup", success=True)
+            return json_response({
+                "success": True,
+                "total": len(backup_items),
+                "exported_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "accounts": backup_items,
+            })
+
 
 def create_mini_app(
     bot_token: str,
@@ -395,7 +586,13 @@ def create_mini_app(
     app.router.add_get("/api/accounts", handler.handle_get_accounts)
     app.router.add_post("/api/accounts", handler.handle_add_account)
     app.router.add_post("/api/accounts/{id}/favorite", handler.handle_toggle_favorite)
+    app.router.add_post("/api/accounts/{id}/hotp_next", handler.handle_hotp_next)
+    app.router.add_put("/api/accounts/{id}", handler.handle_update_account)
+    app.router.add_post("/api/accounts/{id}/update", handler.handle_update_account)
     app.router.add_delete("/api/accounts/{id}", handler.handle_delete_account)
+    app.router.add_post("/api/settings/change_pin", handler.handle_change_pin)
+    app.router.add_get("/api/settings/logs", handler.handle_get_audit_logs)
+    app.router.add_get("/api/settings/backup", handler.handle_export_backup)
 
     # Preflight OPTIONS
     app.router.add_route("OPTIONS", "/{tail:.*}", handle_options)
