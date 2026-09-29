@@ -12,7 +12,8 @@ def encode_qr_image(data: str) -> bytes:
         box_size=10,
         border=4,
     )
-    qr.add_data(data)
+    safe_data = str(data) if data is not None else ""
+    qr.add_data(safe_data)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
 
@@ -26,6 +27,8 @@ def decode_qr_image(image_bytes: bytes) -> Optional[str]:
     Decode QR code from image bytes.
     Tries pyzbar first; falls back to OpenCV if pyzbar fails or is unavailable.
     """
+    if not image_bytes or not isinstance(image_bytes, (bytes, bytearray)):
+        return None
     # Attempt 1: pyzbar
     try:
         from pyzbar.pyzbar import decode as zbar_decode

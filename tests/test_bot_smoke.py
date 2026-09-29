@@ -50,3 +50,32 @@ async def test_text_message_dispatcher_awaiting_qr(mocker):
     assert "Bot sedang menunggu kiriman foto" in args[0]
     assert kwargs.get("reply_markup") is not None
 
+
+@pytest.mark.asyncio
+async def test_callback_router_malformed_account_id(mocker):
+    from bot import callback_router
+
+    update = mocker.MagicMock()
+    update.callback_query.answer = mocker.AsyncMock()
+    update.callback_query.edit_message_text = mocker.AsyncMock()
+    context = mocker.MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": None}
+
+    # Test malformed callback query data strings that could cause ValueError or IndexError
+    malformed_queries = [
+        "view:select:abc",
+        "view:select:",
+        "view:refresh:xyz",
+        "manage:detail:invalid",
+        "manage:edit_label:",
+        "manage:fav:nan",
+        "manage:del_prompt:abc",
+        "view_all:page:notanumber",
+    ]
+
+    for data in malformed_queries:
+        update.callback_query.data = data
+        # Should gracefully return without raising unhandled ValueError/IndexError
+        await callback_router(update, context)
+

@@ -167,6 +167,11 @@ async def test_view_logs_paginated(session_factory, seed_user_with_secret):
     # Page 1 of 2 should have Next button
     assert any("Next" in t or "▶️" in t for t in texts)
 
+    # Test malformed page parameter
+    query.data = "settings:logs:invalid_page"
+    await handle_view_logs_callback(update, context)
+    assert query.edit_message_text.call_count == 2
+
 
 @pytest.mark.asyncio
 async def test_import_backup_flow(session_factory, seed_user_with_secret):

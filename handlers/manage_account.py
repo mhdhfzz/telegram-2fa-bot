@@ -219,6 +219,18 @@ async def handle_save_new_label(update: Update, context: ContextTypes.DEFAULT_TY
                     account.label = new_label
                     await session.commit()
                     await log_action(session, user.id, "manage_account", True, account_id=account.id)
+
+                    # Keep in-memory views in sync
+                    active_v = context.user_data.get("active_view")
+                    if isinstance(active_v, dict) and active_v.get("account_id") == account_id:
+                        active_v["label"] = new_label
+                    active_va = context.user_data.get("active_view_all")
+                    if isinstance(active_va, dict) and "accounts" in active_va:
+                        for acc_item in active_va["accounts"]:
+                            if acc_item.get("id") == account_id:
+                                acc_item["label"] = new_label
+                                break
+
                     from telegram.helpers import escape_markdown
                     safe_new_label = escape_markdown(new_label, version=1)
                     success_kb = InlineKeyboardMarkup([
@@ -257,6 +269,7 @@ async def handle_toggle_favorite(
                     account.is_favorite = not account.is_favorite
                     await session.commit()
                     await log_action(session, user.id, "manage_account", True, account_id=account.id)
+                    context.user_data.pop("active_view_all", None)
 
     await handle_show_account_detail(update, context, account_id)
 
@@ -425,6 +438,18 @@ async def handle_delete_account_pin_keypad(
 
         clear_keypad_buffer(context.user_data, "del_pin")
         context.user_data.pop("del_acc_id", None)
+        if context.user_data.get("view_account_id") == account_id:
+            context.user_data.pop("view_account_id", None)
+
+        active_v = context.user_data.get("active_view")
+        if isinstance(active_v, dict) and active_v.get("account_id") == account_id:
+            if update.effective_chat and active_v.get("message_id"):
+                from handlers.view_code import cancel_view_code_jobs
+                cancel_view_code_jobs(context, update.effective_chat.id, active_v["message_id"])
+            context.user_data.pop("active_view", None)
+
+        # Invalidate active_view_all so deleted account does not persist in memory
+        context.user_data.pop("active_view_all", None)
 
         success_text = "🗑️ **Akun Berhasil Dihapus Permanen.**"
         success_kb = InlineKeyboardMarkup([

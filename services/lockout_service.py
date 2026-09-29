@@ -17,7 +17,7 @@ def check_lockout(user: User) -> Tuple[bool, int]:
     Returns:
         (is_locked: bool, remaining_seconds: int)
     """
-    if not user.locked_until:
+    if not user or not user.locked_until:
         return False, 0
 
     now = datetime.now(timezone.utc)

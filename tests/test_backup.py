@@ -93,4 +93,16 @@ def test_backup_whitespace_or_invalid_types():
     restored2 = import_accounts_backup(backup_data, "  my_secret_pass  ")
     assert restored2[0]["secret"] == "ABCDEF123456"
 
+    # Non-list accounts_data
+    with pytest.raises(ValueError, match="accounts_data must be a list"):
+        export_accounts_backup("not a list", "valid_passphrase")  # type: ignore
+
+    # Non-dict envelope
+    with pytest.raises(ValueError, match="Invalid passphrase or corrupted backup"):
+        import_accounts_backup(b"[]", "valid_passphrase")
+
+    # Non-string salt in envelope
+    with pytest.raises(ValueError, match="Invalid passphrase or corrupted backup"):
+        import_accounts_backup(b'{"salt": 123, "nonce": "aa", "ciphertext": "bb"}', "valid_passphrase")
+
 

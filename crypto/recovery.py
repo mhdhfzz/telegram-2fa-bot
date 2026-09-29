@@ -282,7 +282,8 @@ INDONESIAN_WORDS = [
 
 def generate_recovery_phrase(language: str = "en") -> list[str]:
     """Generate 12 random words from chosen wordlist."""
-    wordlist = INDONESIAN_WORDS if language.lower() == "id" else BIP39_ENGLISH_WORDS
+    lang = language.lower() if isinstance(language, str) else "en"
+    wordlist = INDONESIAN_WORDS if lang == "id" else BIP39_ENGLISH_WORDS
     return [secrets.choice(wordlist) for _ in range(12)]
 
 
@@ -305,5 +306,7 @@ def hash_recovery_phrase(phrase: list[str]) -> str:
 
 def verify_recovery_phrase(phrase: list[str], expected_hash: str) -> bool:
     """Verify recovery phrase against stored hash in constant time."""
+    if not phrase or not expected_hash or not isinstance(expected_hash, str):
+        return False
     computed_hash = hash_recovery_phrase(phrase)
     return hmac.compare_digest(computed_hash, expected_hash)

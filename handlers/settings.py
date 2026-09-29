@@ -349,21 +349,35 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                 acc_stmt = select(Account).where(Account.user_id == user.id)
                 accounts = list((await session.execute(acc_stmt)).scalars().all())
 
-                for acc in accounts:
-                    decrypted_secret = decrypt_secret(
-                        old_key, acc.secret_encrypted, acc.nonce
-                    )
-                    new_cipher, new_nonce = encrypt_secret(new_key, decrypted_secret)
-                    acc.secret_encrypted = new_cipher
-                    acc.nonce = new_nonce
+                try:
+                    for acc in accounts:
+                        decrypted_secret = decrypt_secret(
+                            old_key, acc.secret_encrypted, acc.nonce
+                        )
+                        new_cipher, new_nonce = encrypt_secret(new_key, decrypted_secret)
+                        acc.secret_encrypted = new_cipher
+                        acc.nonce = new_nonce
 
-                user.kdf_salt = new_kdf_salt
-                user.pin_hash_salt = new_pin_salt
-                user.pin_hash = hash_pin(new_pin, new_pin_salt)
-                user.recovery_phrase_hash = hash_recovery_phrase(phrase)
-                await record_successful_pin_attempt(session, user)
-                await log_action(session, user.id, "pin_change", True)
-                await session.commit()
+                    user.kdf_salt = new_kdf_salt
+                    user.pin_hash_salt = new_pin_salt
+                    user.pin_hash = hash_pin(new_pin, new_pin_salt)
+                    user.recovery_phrase_hash = hash_recovery_phrase(phrase)
+                    await record_successful_pin_attempt(session, user)
+                    await log_action(session, user.id, "pin_change", True)
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    clear_keypad_buffer(context.user_data, "ch_pin_old")
+                    clear_keypad_buffer(context.user_data, "ch_pin_new1")
+                    clear_keypad_buffer(context.user_data, "ch_pin_new2")
+                    context.user_data.pop("verified_old_pin", None)
+                    context.user_data.pop("temp_new_pin", None)
+                    context.user_data.pop("ch_pin_step", None)
+                    kb = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                    ])
+                    await query.edit_message_text("❌ Gagal mengenkripsi ulang data akun. Perubahan PIN dibatalkan.", reply_markup=kb)
+                    return
 
             clear_keypad_buffer(context.user_data, "ch_pin_old")
             clear_keypad_buffer(context.user_data, "ch_pin_new1")
@@ -371,6 +385,21 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
             context.user_data.pop("verified_old_pin", None)
             context.user_data.pop("temp_new_pin", None)
             context.user_data.pop("ch_pin_step", None)
+
+            # Invalidate any active view sessions since PIN / key changed
+            active_v = context.user_data.pop("active_view", None)
+            if isinstance(active_v, dict) and update.effective_chat:
+                mid = active_v.get("message_id")
+                if mid:
+                    from handlers.view_code import cancel_view_code_jobs
+                    cancel_view_code_jobs(context, update.effective_chat.id, mid)
+
+            active_va = context.user_data.pop("active_view_all", None)
+            if isinstance(active_va, dict) and update.effective_chat:
+                mid = active_va.get("message_id")
+                if mid:
+                    from handlers.view_all_codes import cancel_view_all_jobs
+                    cancel_view_all_jobs(context, update.effective_chat.id, mid)
 
             phrase_str = " ".join(phrase)
             settings = context.bot_data.get("settings")
@@ -673,7 +702,10 @@ async def handle_view_logs_callback(update: Update, context: ContextTypes.DEFAUL
 
     data = query.data or "settings:logs:1"
     parts = data.split(":")
-    page = int(parts[2]) if len(parts) > 2 else 1
+    try:
+        page = int(parts[2]) if len(parts) > 2 else 1
+    except (IndexError, ValueError):
+        page = 1
 
     session_factory = context.bot_data.get("session_factory")
     user_id = update.effective_user.id

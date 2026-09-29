@@ -33,6 +33,10 @@ def test_render_pin_display():
     assert render_pin_display(0, max_length=6) == "PIN: _ _ _ _ _ _"
     assert render_pin_display(3, max_length=6) == "PIN: • • • _ _ _"
     assert render_pin_display(6, max_length=6) == "PIN: • • • • • •"
+    # max_length <= 0 clamps to get_pin_length()
+    assert render_pin_display(0, max_length=0) == "PIN: _ _ _ _ _ _"
+    assert render_pin_display(0, max_length=-5) == "PIN: _ _ _ _ _ _"
+
 
 
 def test_handle_keypad_press_digits_and_backspace():

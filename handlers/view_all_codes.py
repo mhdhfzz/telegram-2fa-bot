@@ -389,8 +389,12 @@ async def handle_view_all_page(
     if not query:
         return
 
-    active_session = context.user_data.get("active_view_all")
-    if not active_session or time.time() >= active_session.get("expires_at", 0):
+    active_session = context.user_data.get("active_view_all") if isinstance(context.user_data, dict) else None
+    expires_at = active_session.get("expires_at", 0) if isinstance(active_session, dict) else 0
+    if not isinstance(expires_at, (int, float)):
+        expires_at = 0
+
+    if not active_session or time.time() >= expires_at:
         try:
             await query.answer("⏱️ Sesi telah berakhir. Masukkan PIN kembali.", show_alert=True)
         except Exception:
@@ -438,8 +442,12 @@ async def handle_view_all_refresh(
     if not query:
         return
 
-    active_session = context.user_data.get("active_view_all")
-    if not active_session or time.time() >= active_session.get("expires_at", 0):
+    active_session = context.user_data.get("active_view_all") if isinstance(context.user_data, dict) else None
+    expires_at = active_session.get("expires_at", 0) if isinstance(active_session, dict) else 0
+    if not isinstance(expires_at, (int, float)):
+        expires_at = 0
+
+    if not active_session or time.time() >= expires_at:
         await query.answer("⏱️ Sesi telah berakhir. Masukkan PIN kembali.", show_alert=True)
         await handle_view_all_codes_start(update, context)
         return

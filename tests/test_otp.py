@@ -80,6 +80,15 @@ def test_qr_encode_and_decode():
     decoded = decode_qr_image(png_bytes)
     assert decoded == data
 
+    # Test decode_qr_image with None and empty bytes
+    assert decode_qr_image(None) is None  # type: ignore
+    assert decode_qr_image(b"") is None
+    assert decode_qr_image(12345) is None  # type: ignore
+
+    # Test encode_qr_image with None
+    assert len(encode_qr_image(None)) > 0  # type: ignore
+
+
 
 def test_parse_otpauth_uri_sanitization():
     # Test zero or negative period, invalid digits, negative counter

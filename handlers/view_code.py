@@ -52,6 +52,7 @@ async def view_code_auto_delete_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
         except Exception:
             pass
+        cancel_view_code_jobs(context, chat_id, message_id)
 
     if context.user_data:
         context.user_data.pop("active_view", None)
@@ -141,12 +142,17 @@ async def handle_refresh_code(
     if not query:
         return
 
-    active_view = context.user_data.get("active_view")
+    active_view = context.user_data.get("active_view") if isinstance(context.user_data, dict) else None
+    expires_at = active_view.get("expires_at", 0) if isinstance(active_view, dict) else 0
+    if not isinstance(expires_at, (int, float)):
+        expires_at = 0
+
     # Verify active view is valid, for this account, and not expired
     if (
         active_view
+        and isinstance(active_view, dict)
         and active_view.get("account_id") == account_id
-        and time.time() < active_view.get("expires_at", 0)
+        and time.time() < expires_at
     ):
         secret = active_view["secret"]
         acc_type = active_view.get("type", "totp")

@@ -5,6 +5,8 @@ from crypto.kdf import derive_encryption_key, generate_salt
 
 
 def export_accounts_backup(accounts_data: List[Dict[str, Any]], export_passphrase: str) -> bytes:
+    if not isinstance(accounts_data, list):
+        raise ValueError("accounts_data must be a list")
     if not export_passphrase or not isinstance(export_passphrase, str) or len(export_passphrase.strip()) < 4:
         raise ValueError("Passphrase must be at least 4 characters")
 
@@ -31,7 +33,11 @@ def import_accounts_backup(backup_bytes: bytes, export_passphrase: str) -> List[
 
     try:
         envelope = json.loads(backup_bytes.decode("utf-8"))
+        if not isinstance(envelope, dict):
+            raise ValueError("Corrupted envelope: not a dict")
         salt = envelope["salt"]
+        if not isinstance(salt, str):
+            raise ValueError("Invalid salt format")
         nonce = bytes.fromhex(envelope["nonce"])
         ciphertext = bytes.fromhex(envelope["ciphertext"])
     except Exception as exc:

@@ -114,3 +114,47 @@ def test_recovery_phrase_generation_and_verification():
     assert normalize_phrase("") == ""
     assert normalize_phrase(None) == ""
 
+    # Test generate_recovery_phrase with None/invalid language
+    assert len(generate_recovery_phrase(None)) == 12  # type: ignore
+    assert len(generate_recovery_phrase(123)) == 12  # type: ignore
+
+    # Test verify_recovery_phrase with None/invalid expected_hash and empty phrase
+    assert verify_recovery_phrase(phrase_en, None) is False  # type: ignore
+    assert verify_recovery_phrase(phrase_en, 12345) is False  # type: ignore
+    assert verify_recovery_phrase([], hash_en) is False
+    assert verify_recovery_phrase(None, hash_en) is False  # type: ignore
+
+
+def test_crypto_defensive_parameters():
+    key = b"0" * 32
+
+    # derive_raw_argon2 defensive tests
+    from crypto.kdf import derive_raw_argon2
+    with pytest.raises(TypeError, match="secret must be a string"):
+        derive_raw_argon2(None, "aabb")  # type: ignore
+    with pytest.raises(TypeError, match="salt_hex must be a string"):
+        derive_raw_argon2("123456", None)  # type: ignore
+
+    # verify_pin defensive tests
+    assert verify_pin(None, "salt", "hash") is False  # type: ignore
+    assert verify_pin("123456", None, "hash") is False  # type: ignore
+    assert verify_pin("123456", "invalid_hex", "hash") is False
+    assert verify_pin("123456", "aabb", None) is False  # type: ignore
+
+    # encrypt_secret defensive tests
+    with pytest.raises(ValueError, match="Key must be 32 bytes"):
+        encrypt_secret(None, "secret")  # type: ignore
+    with pytest.raises(ValueError, match="Key must be 32 bytes"):
+        encrypt_secret(b"short_key", "secret")
+    with pytest.raises(ValueError, match="Plaintext must be a string"):
+        encrypt_secret(key, None)  # type: ignore
+
+    # decrypt_secret defensive tests
+    with pytest.raises(ValueError, match="Key must be 32 bytes"):
+        decrypt_secret(b"short", b"cipher", b"nonce")
+    with pytest.raises(ValueError, match="Ciphertext and nonce must be bytes"):
+        decrypt_secret(key, None, b"nonce")  # type: ignore
+    with pytest.raises(ValueError, match="Ciphertext and nonce must be bytes"):
+        decrypt_secret(key, b"cipher", None)  # type: ignore
+
+

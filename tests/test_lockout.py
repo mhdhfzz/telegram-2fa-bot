@@ -78,6 +78,9 @@ async def test_lockout_escalation(session: AsyncSession):
     is_locked, rem = check_lockout(user)
     assert not is_locked
 
+    # Check lockout with None user safely returns False
+    assert check_lockout(None) == (False, 0)  # type: ignore
+
 
 @pytest.mark.asyncio
 async def test_audit_logging_and_pagination(session: AsyncSession):

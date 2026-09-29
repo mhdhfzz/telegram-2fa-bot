@@ -101,7 +101,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             page = int(data.split(":")[2])
         except (IndexError, ValueError):
-            page = 1
+            return
         await handle_view_all_page(update, context, page)
     elif data == "view_all:refresh":
         await handle_view_all_refresh(update, context)
@@ -120,26 +120,44 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("add_acc_pin:"):
         await handle_add_account_pin_keypad(update, context)
     elif data.startswith("view:select:"):
-        acc_id = int(data.split(":")[2])
+        try:
+            acc_id = int(data.split(":")[2])
+        except (IndexError, ValueError):
+            return
         await handle_select_account_for_code(update, context, acc_id)
     elif data.startswith("view:refresh:"):
-        acc_id = int(data.split(":")[2])
+        try:
+            acc_id = int(data.split(":")[2])
+        except (IndexError, ValueError):
+            return
         await handle_refresh_code(update, context, acc_id)
     elif data.startswith("view_pin:"):
         await handle_view_code_pin_keypad(update, context)
     elif data == "manage:list":
         await handle_list_accounts_to_manage(update, context)
     elif data.startswith("manage:detail:"):
-        acc_id = int(data.split(":")[2])
+        try:
+            acc_id = int(data.split(":")[2])
+        except (IndexError, ValueError):
+            return
         await handle_show_account_detail(update, context, acc_id)
     elif data.startswith("manage:edit_label:"):
-        acc_id = int(data.split(":")[2])
+        try:
+            acc_id = int(data.split(":")[2])
+        except (IndexError, ValueError):
+            return
         await handle_edit_label_prompt(update, context, acc_id)
     elif data.startswith("manage:fav:"):
-        acc_id = int(data.split(":")[2])
+        try:
+            acc_id = int(data.split(":")[2])
+        except (IndexError, ValueError):
+            return
         await handle_toggle_favorite(update, context, acc_id)
     elif data.startswith("manage:del_prompt:"):
-        acc_id = int(data.split(":")[2])
+        try:
+            acc_id = int(data.split(":")[2])
+        except (IndexError, ValueError):
+            return
         await handle_delete_prompt(update, context, acc_id)
     elif data.startswith("del_pin:"):
         await handle_delete_account_pin_keypad(update, context)

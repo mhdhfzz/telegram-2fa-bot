@@ -58,8 +58,8 @@ def render_pin_display(length: int, max_length: Optional[int] = None) -> str:
     Actual PIN digits are NEVER included.
     If max_length is not specified, uses the configured pin_length.
     """
-    if max_length is None:
-        max_length = get_pin_length()
+    if max_length is None or max_length <= 0:
+        max_length = max(1, get_pin_length())
     length = max(0, min(length, max_length))
     bullets = ["•"] * length
     underscores = ["_"] * (max_length - length)
@@ -79,8 +79,8 @@ def handle_keypad_press(
         (current_buffer: str, is_completed: bool, is_cancelled: bool)
     If max_length is not specified, uses the configured pin_length.
     """
-    if max_length is None:
-        max_length = get_pin_length()
+    if max_length is None or max_length <= 0:
+        max_length = max(1, get_pin_length())
     buffer = user_data.get(buffer_key, "")
 
     if key_val.isdigit():
