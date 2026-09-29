@@ -358,3 +358,42 @@ async def test_view_all_jobs_execution():
     bot.delete_message.assert_called_once_with(chat_id=111, message_id=222)
     assert "active_view_all" not in context.user_data
     bot.send_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_bot_callback_router_routes_view_all_actions(monkeypatch):
+    from bot import callback_router
+
+    mock_start = AsyncMock()
+    mock_keypad = AsyncMock()
+    mock_page = AsyncMock()
+    mock_refresh = AsyncMock()
+
+    monkeypatch.setattr("bot.handle_view_all_codes_start", mock_start)
+    monkeypatch.setattr("bot.handle_view_all_pin_keypad", mock_keypad)
+    monkeypatch.setattr("bot.handle_view_all_page", mock_page)
+    monkeypatch.setattr("bot.handle_view_all_refresh", mock_refresh)
+
+    update = MagicMock()
+    context = MagicMock()
+
+    # Route 1: menu:view_all_codes
+    update.callback_query.data = "menu:view_all_codes"
+    await callback_router(update, context)
+    mock_start.assert_awaited_once_with(update, context)
+
+    # Route 2: view_all_pin:press:5
+    update.callback_query.data = "view_all_pin:press:5"
+    await callback_router(update, context)
+    mock_keypad.assert_awaited_once_with(update, context)
+
+    # Route 3: view_all:page:2
+    update.callback_query.data = "view_all:page:2"
+    await callback_router(update, context)
+    mock_page.assert_awaited_once_with(update, context, 2)
+
+    # Route 4: view_all:refresh
+    update.callback_query.data = "view_all:refresh"
+    await callback_router(update, context)
+    mock_refresh.assert_awaited_once_with(update, context)
+

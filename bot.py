@@ -61,6 +61,12 @@ from handlers.view_code import (
     handle_view_code_menu,
     handle_view_code_pin_keypad,
 )
+from handlers.view_all_codes import (
+    handle_view_all_codes_start,
+    handle_view_all_page,
+    handle_view_all_pin_keypad,
+    handle_view_all_refresh,
+)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -86,6 +92,18 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await handle_add_account_menu(update, context)
     elif data == "menu:view_code":
         await handle_view_code_menu(update, context)
+    elif data == "menu:view_all_codes":
+        await handle_view_all_codes_start(update, context)
+    elif data.startswith("view_all_pin:"):
+        await handle_view_all_pin_keypad(update, context)
+    elif data.startswith("view_all:page:"):
+        try:
+            page = int(data.split(":")[2])
+        except (IndexError, ValueError):
+            page = 1
+        await handle_view_all_page(update, context, page)
+    elif data == "view_all:refresh":
+        await handle_view_all_refresh(update, context)
     elif data == "menu:manage_account":
         await handle_list_accounts_to_manage(update, context)
     elif data == "menu:settings":
