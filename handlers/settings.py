@@ -735,7 +735,14 @@ async def handle_view_logs_callback(update: Update, context: ContextTypes.DEFAUL
     }
 
     for log in logs:
-        time_str = log.created_at.strftime("%Y-%m-%d %H:%M")
+        # Convert UTC timestamp to local server time (respects VPS/system timezone)
+        ts = log.created_at
+        if ts.tzinfo is not None:
+            local_ts = ts.astimezone()
+        else:
+            from datetime import timezone
+            local_ts = ts.replace(tzinfo=timezone.utc).astimezone()
+        time_str = local_ts.strftime("%Y-%m-%d %H:%M")
         status = "✅ Sukses" if log.success else "❌ Gagal"
         action = action_names.get(log.action, log.action)
         log_lines.append(f"• `{time_str}` {action} ({status})")
