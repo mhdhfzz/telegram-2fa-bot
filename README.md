@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram_Bot_API-v20+-2CA5E0.svg?logo=telegram&logoColor=white)](https://python-telegram-bot.org/)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM%20%7C%20Argon2id-green.svg)](https://cryptography.io/)
-[![Tests](https://img.shields.io/badge/Tests-84%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
+[![Tests](https://img.shields.io/badge/Tests-90%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
 [![Demo Bot](https://img.shields.io/badge/Demo_Bot-@VexAuthKey__bot-26A5E4.svg?logo=telegram&logoColor=white)](https://t.me/VexAuthKey_bot)
 
 Bot Telegram yang berfungsi sebagai aplikasi *two-factor authenticator* mandiri (seperti Google Authenticator / Authy), dihosting di VPS menggunakan Python. Bot mendukung multi-tenant dengan data antar-pengguna terisolasi penuh dan dienkripsi kuat menggunakan PIN pribadi masing-masing user.
@@ -144,23 +144,23 @@ pytest -v
 
 Hasil pengujian:
 ```text
-tests/test_add_account.py ...                              [  3%]
-tests/test_backup.py ....                                  [  8%]
-tests/test_bot_smoke.py .                                  [  9%]
-tests/test_config.py ...                                   [ 13%]
-tests/test_crypto.py ......                                [ 20%]
-tests/test_db.py ...                                       [ 24%]
-tests/test_keypad.py ......                                [ 31%]
-tests/test_lockout.py ..                                   [ 33%]
-tests/test_lockout_handlers.py .....                       [ 39%]
-tests/test_menu_handlers.py ..........                     [ 51%]
-tests/test_otp.py ........                                 [ 61%]
-tests/test_settings.py .....                               [ 67%]
-tests/test_start_handler.py .....                          [ 73%]
-tests/test_view_all_codes.py ..............                [ 89%]
+tests/test_add_account.py .....                            [  5%]
+tests/test_backup.py ....                                  [ 10%]
+tests/test_bot_smoke.py ...                                [ 13%]
+tests/test_config.py ...                                   [ 16%]
+tests/test_crypto.py ......                                [ 23%]
+tests/test_db.py ...                                       [ 26%]
+tests/test_keypad.py ......                                [ 33%]
+tests/test_lockout.py ..                                   [ 35%]
+tests/test_lockout_handlers.py .....                       [ 41%]
+tests/test_menu_handlers.py ..........                     [ 52%]
+tests/test_otp.py .........                                [ 62%]
+tests/test_settings.py ......                              [ 68%]
+tests/test_start_handler.py .....                          [ 74%]
+tests/test_view_all_codes.py ..............                [ 87%]
 tests/test_view_code.py .........                          [100%]
 
-============================= 84 passed in 23.08s =============================
+============================= 90 passed in 24.31s =============================
 ```
 
 ---

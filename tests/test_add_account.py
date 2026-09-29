@@ -154,3 +154,49 @@ async def test_manual_input_auto_deletion(session_factory, seed_user):
     # Verify old label prompt (101) was deleted
     context.bot.delete_message.assert_awaited_with(chat_id=9999, message_id=101)
 
+
+@pytest.mark.asyncio
+async def test_handle_qr_non_image_document():
+    from handlers.add_account import handle_qr_photo
+
+    update = MagicMock()
+    update.message.photo = []
+    doc = MagicMock()
+    doc.mime_type = "application/pdf"
+    update.message.document = doc
+    update.message.reply_text = AsyncMock()
+
+    context = MagicMock()
+    context.user_data = {"add_state": "awaiting_qr"}
+
+    await handle_qr_photo(update, context)
+    update.message.reply_text.assert_awaited_once()
+    args, kwargs = update.message.reply_text.call_args
+    assert "Format file tidak didukung" in args[0]
+    assert kwargs.get("reply_markup") is not None
+
+
+@pytest.mark.asyncio
+async def test_handle_add_account_pin_missing_pending():
+    from handlers.add_account import handle_add_account_pin_keypad
+
+    update = MagicMock()
+    query = MagicMock()
+    query.data = "add_acc_pin:key:1"
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    # 6 digits entered but pending_account is missing
+    context.user_data = {
+        "add_acc_pin": "12345",
+    }
+    context.bot_data = {}
+
+    await handle_add_account_pin_keypad(update, context)
+    query.edit_message_text.assert_awaited_once()
+    args, kwargs = query.edit_message_text.call_args
+    assert "Data akun tidak ditemukan" in args[0]
+    assert kwargs.get("reply_markup") is not None
+

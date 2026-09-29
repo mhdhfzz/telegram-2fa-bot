@@ -1,7 +1,8 @@
 import asyncio
 import logging
 from typing import Optional
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -168,6 +169,17 @@ async def text_message_dispatcher(update: Update, context: ContextTypes.DEFAULT_
     elif add_state == "awaiting_manual_label":
         await handle_manual_label_input(update, context)
         return
+    elif add_state == "awaiting_qr":
+        await update.message.reply_text(
+            "📷 Bot sedang menunggu kiriman foto / gambar QR Code.\n\n"
+            "Jika Anda ingin memasukkan Secret Key secara manual lewat teks, silakan pilih tombol di bawah:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⌨️ Input Manual", callback_data="add_acc:manual")],
+                [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")],
+            ]),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
 
     manage_state = context.user_data.get("manage_state")
     if manage_state == "awaiting_new_label":
@@ -221,11 +233,15 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
         return
 
     err_str = str(err)
-    if "Message is not modified" in err_str:
-        return
-    if "Query is too old" in err_str:
-        return
-    if "Message to edit not found" in err_str:
+    benign_messages = (
+        "Message is not modified",
+        "Query is too old",
+        "Message to edit not found",
+        "Query is already answered",
+        "Message can't be deleted",
+        "Message to delete not found",
+    )
+    if any(msg in err_str for msg in benign_messages):
         return
 
     logger.error("Unhandled exception while processing update:", exc_info=err)

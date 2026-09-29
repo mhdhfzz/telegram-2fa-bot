@@ -86,9 +86,17 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if update.message.photo:
         highest_res_photo = update.message.photo[-1]
         photo_file = await highest_res_photo.get_file()
-    elif update.message.document and update.message.document.mime_type:
+    elif update.message.document and isinstance(update.message.document.mime_type, str):
         if update.message.document.mime_type.startswith("image/"):
             photo_file = await update.message.document.get_file()
+        else:
+            await update.message.reply_text(
+                "❌ Format file tidak didukung! Silakan kirim file foto/gambar QR Code (PNG, JPG).",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ]),
+            )
+            return
 
     if not photo_file:
         return
@@ -193,11 +201,16 @@ async def handle_manual_secret_input(update: Update, context: ContextTypes.DEFAU
     raw_secret = update.message.text or ""
     cleaned_secret = clean_base32_secret(raw_secret)
 
+    cancel_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Batal", callback_data="menu:back_to_main")]
+    ])
+
     if not cleaned_secret or not re.match(r"^[A-Z2-7=]+$", cleaned_secret):
         sent_err = await update.message.reply_text(
             "❌ **Secret Key tidak valid!**\n\n"
             "Secret key Base32 hanya boleh berisi huruf A-Z dan angka 2-7 (tanpa spasi). "
-            "Silakan ketik ulang Secret Key yang benar:"
+            "Silakan ketik ulang Secret Key yang benar:",
+            reply_markup=cancel_kb,
         )
         try:
             await update.message.delete()
@@ -220,7 +233,8 @@ async def handle_manual_secret_input(update: Update, context: ContextTypes.DEFAU
         sent_err = await update.message.reply_text(
             "❌ **Secret Key tidak valid!**\n\n"
             "Secret key tidak dapat didekode sebagai Base32 yang valid. "
-            "Silakan periksa dan ketik ulang Secret Key yang benar:"
+            "Silakan periksa dan ketik ulang Secret Key yang benar:",
+            reply_markup=cancel_kb,
         )
         try:
             await update.message.delete()
@@ -371,7 +385,15 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
     if is_complete:
         pending = context.user_data.get("pending_account")
         if not pending:
-            await query.edit_message_text("❌ Data akun tidak ditemukan. Silakan ulangi.")
+            clear_keypad_buffer(context.user_data, "add_acc_pin")
+            context.user_data.pop("add_state", None)
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+            ])
+            await query.edit_message_text(
+                "❌ Data akun tidak ditemukan atau sesi telah berakhir. Silakan ulangi.",
+                reply_markup=kb,
+            )
             return
 
         session_factory = context.bot_data.get("session_factory")
@@ -382,7 +404,13 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
                 user_stmt = select(User).where(User.telegram_user_id == user_id)
                 user = (await session.execute(user_stmt)).scalars().first()
                 if not user:
-                    await query.edit_message_text("❌ Pengguna tidak terdaftar.")
+                    clear_keypad_buffer(context.user_data, "add_acc_pin")
+                    context.user_data.pop("pending_account", None)
+                    context.user_data.pop("add_state", None)
+                    kb = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                    ])
+                    await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
                     return
 
                 is_locked, remaining_seconds = check_lockout(user)

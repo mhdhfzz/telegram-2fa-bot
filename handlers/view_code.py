@@ -399,7 +399,10 @@ async def handle_view_code_pin_keypad(
             user_stmt = select(User).where(User.telegram_user_id == user_id)
             user = (await session.execute(user_stmt)).scalars().first()
             if not user:
-                await query.edit_message_text("❌ User tidak terdaftar.")
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ User tidak terdaftar.", reply_markup=kb)
                 return
 
             # Check lockout
@@ -440,7 +443,10 @@ async def handle_view_code_pin_keypad(
             acc_stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
             account = (await session.execute(acc_stmt)).scalars().first()
             if not account:
-                await query.edit_message_text("❌ Akun tidak ditemukan.")
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Daftar Akun", callback_data="menu:view_code")]
+                ])
+                await query.edit_message_text("❌ Akun tidak ditemukan.", reply_markup=kb)
                 clear_keypad_buffer(context.user_data, "view_pin")
                 return
 
@@ -452,7 +458,10 @@ async def handle_view_code_pin_keypad(
             try:
                 secret = decrypt_secret(key, account.secret_encrypted, account.nonce)
             except Exception:
-                await query.edit_message_text("❌ Gagal mendekripsi secret akun.")
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ Gagal mendekripsi secret akun.", reply_markup=kb)
                 return
 
             emoji = get_issuer_emoji(account.issuer)

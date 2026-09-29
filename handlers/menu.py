@@ -180,7 +180,10 @@ async def handle_search_query_message(update: Update, context: ContextTypes.DEFA
             pass
 
     if not search_query:
-        await update.message.reply_text("Pencarian dibatalkan.")
+        cancel_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+        ])
+        await update.message.reply_text("Pencarian dibatalkan.", reply_markup=cancel_kb)
         return
 
     from sqlalchemy import select

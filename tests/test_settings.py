@@ -300,3 +300,35 @@ async def test_handle_confirm_phrase_settings_cancels_job_and_returns_to_setting
     assert call_kwargs["chat_id"] == 6666
     assert "Pengaturan & Keamanan" in call_kwargs["text"]
 
+
+@pytest.mark.asyncio
+async def test_import_file_validation_extension_and_size():
+    from handlers.settings import handle_import_file_document
+
+    update = MagicMock()
+    doc = MagicMock()
+    doc.file_name = "backup.txt"
+    doc.file_size = 1000
+    update.message.document = doc
+    update.message.reply_text = AsyncMock()
+
+    context = MagicMock()
+    context.user_data = {"settings_state": "awaiting_import_file"}
+
+    # Test invalid extension
+    await handle_import_file_document(update, context)
+    update.message.reply_text.assert_awaited_once()
+    args, kwargs = update.message.reply_text.call_args
+    assert "Format file tidak didukung" in args[0]
+    assert kwargs.get("reply_markup") is not None
+
+    # Test oversized file (> 5MB)
+    update.message.reply_text.reset_mock()
+    doc.file_name = "backup.json"
+    doc.file_size = 10 * 1024 * 1024  # 10MB
+    await handle_import_file_document(update, context)
+    update.message.reply_text.assert_awaited_once()
+    args, kwargs = update.message.reply_text.call_args
+    assert "Ukuran file terlalu besar" in args[0]
+    assert kwargs.get("reply_markup") is not None
+

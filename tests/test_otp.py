@@ -88,3 +88,10 @@ def test_parse_otpauth_uri_sanitization():
     assert parsed["digits"] == 6   # Sanitized to 6
     assert parsed["counter"] == 0  # Sanitized to 0
 
+
+def test_parse_otpauth_uri_invalid_secret():
+    import pytest
+    uri_invalid_b32 = "otpauth://totp/Test:User?secret=INVALID_BASE32_1890!@#&period=30"
+    with pytest.raises(ValueError, match="Secret key tidak valid"):
+        parse_otpauth_uri(uri_invalid_b32)
+

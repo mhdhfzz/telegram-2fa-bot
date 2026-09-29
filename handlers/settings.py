@@ -169,6 +169,11 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                     stmt = select(User).where(User.telegram_user_id == user_id)
                     user = (await session.execute(stmt)).scalars().first()
                     if not user:
+                        clear_keypad_buffer(context.user_data, "ch_pin_old")
+                        kb = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                        ])
+                        await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
                         return
 
                     is_locked, remaining_seconds = check_lockout(user)
@@ -432,6 +437,11 @@ async def handle_export_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                 stmt = select(User).where(User.telegram_user_id == user_id)
                 user = (await session.execute(stmt)).scalars().first()
                 if not user:
+                    clear_keypad_buffer(context.user_data, "export_pin")
+                    kb = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+                    ])
+                    await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
                     return
 
                 is_locked, remaining_seconds = check_lockout(user)
@@ -700,6 +710,26 @@ async def handle_import_file_document(update: Update, context: ContextTypes.DEFA
     if not doc:
         return
 
+    cancel_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔙 Batal", callback_data="menu:settings")]
+    ])
+
+    if isinstance(doc.file_name, str) and not doc.file_name.lower().endswith(".json"):
+        await update.message.reply_text(
+            "❌ Format file tidak didukung! File cadangan harus berekstensi `.json`.",
+            reply_markup=cancel_kb,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if isinstance(doc.file_size, int) and doc.file_size > 5 * 1024 * 1024:
+        await update.message.reply_text(
+            "❌ Ukuran file terlalu besar! Maksimal ukuran file backup adalah 5 MB.",
+            reply_markup=cancel_kb,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
     file = await doc.get_file()
     file_bytes = await file.download_as_bytearray()
 
@@ -740,7 +770,10 @@ async def handle_import_passphrase_message(update: Update, context: ContextTypes
     backup_bytes = context.user_data.get("import_file_bytes")
 
     if not backup_bytes:
-        await update.message.reply_text("Sesi impor kedaluwarsa. Silakan ulangi dari Pengaturan.")
+        cancel_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Pengaturan", callback_data="menu:settings")]
+        ])
+        await update.message.reply_text("Sesi impor kedaluwarsa. Silakan ulangi dari Pengaturan.", reply_markup=cancel_kb)
         context.user_data.pop("settings_state", None)
         return
 
@@ -830,6 +863,12 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                 user_stmt = select(User).where(User.telegram_user_id == user_id)
                 user = (await session.execute(user_stmt)).scalars().first()
                 if not user:
+                    clear_keypad_buffer(context.user_data, "import_pin")
+                    context.user_data.pop("import_accounts_data", None)
+                    kb = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                    ])
+                    await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
                     return
 
                 is_locked, remaining_seconds = check_lockout(user)

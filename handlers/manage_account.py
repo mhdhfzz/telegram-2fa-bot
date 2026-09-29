@@ -98,7 +98,10 @@ async def handle_show_account_detail(
 
     if not account:
         if query:
-            await query.edit_message_text("❌ Akun tidak ditemukan.")
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
+            ])
+            await query.edit_message_text("❌ Akun tidak ditemukan.", reply_markup=kb)
         return
 
     from telegram.helpers import escape_markdown
@@ -189,13 +192,17 @@ async def handle_save_new_label(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception:
             pass
 
+    back_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔙 Daftar Akun", callback_data="manage:list")]
+    ])
+
     new_label = " ".join(new_label.split())
     if not new_label or not account_id:
-        await update.message.reply_text("Label tidak boleh kosong. Perubahan dibatalkan.")
+        await update.message.reply_text("Label tidak boleh kosong. Perubahan dibatalkan.", reply_markup=back_kb)
         return
 
     if len(new_label) > 64:
-        await update.message.reply_text("❌ Label terlalu panjang (maksimal 64 karakter). Perubahan dibatalkan.")
+        await update.message.reply_text("❌ Label terlalu panjang (maksimal 64 karakter). Perubahan dibatalkan.", reply_markup=back_kb)
         return
 
     session_factory = context.bot_data.get("session_factory")
@@ -225,7 +232,7 @@ async def handle_save_new_label(update: Update, context: ContextTypes.DEFAULT_TY
                     )
                     return
 
-    await update.message.reply_text("❌ Gagal memperbarui label akun.")
+    await update.message.reply_text("❌ Gagal memperbarui label akun.", reply_markup=back_kb)
 
 
 async def handle_toggle_favorite(

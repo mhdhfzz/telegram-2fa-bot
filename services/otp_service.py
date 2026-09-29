@@ -69,6 +69,13 @@ def parse_otpauth_uri(uri: str) -> dict:
     if not secret:
         raise ValueError("Missing 'secret' parameter in URI")
     secret = clean_base32_secret(secret)
+    try:
+        if otp_type == "totp":
+            _ = pyotp.TOTP(secret).now()
+        else:
+            _ = pyotp.HOTP(secret).at(0)
+    except Exception as exc:
+        raise ValueError(f"Secret key tidak valid: {str(exc)}")
 
     # Extract issuer and label
     issuer_from_query = query_params.get("issuer", [None])[0]
