@@ -147,10 +147,12 @@ async def test_view_logs_paginated(session_factory, seed_user_with_secret):
     context = MagicMock()
     context.bot_data = {"session_factory": session_factory}
 
-    # Seed 15 logs
+    # Seed 15 logs with view_all_codes and view_all_pin_fail as newest (page 1)
     async with session_factory() as session:
-        for i in range(15):
+        for i in range(13):
             session.add(AccessLog(user_id=user.id, action=f"action_{i}", success=True))
+        session.add(AccessLog(user_id=user.id, action="view_all_codes", success=True))
+        session.add(AccessLog(user_id=user.id, action="view_all_pin_fail", success=False))
         await session.commit()
 
     await handle_view_logs_callback(update, context)
@@ -158,6 +160,8 @@ async def test_view_logs_paginated(session_factory, seed_user_with_secret):
     query.edit_message_text.assert_called_once()
     args, kwargs = query.edit_message_text.call_args
     assert "Log Akses" in args[0]
+    assert "Lihat Semua Kode (✅ Sukses)" in args[0]
+    assert "PIN Semua Kode Salah (❌ Gagal)" in args[0]
     kb = kwargs["reply_markup"].inline_keyboard
     texts = [btn.text for row in kb for btn in row]
     # Page 1 of 2 should have Next button

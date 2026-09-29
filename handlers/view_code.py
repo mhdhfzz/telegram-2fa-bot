@@ -55,6 +55,9 @@ async def view_code_auto_delete_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if context.user_data:
         context.user_data.pop("active_view", None)
+    user_id = getattr(job, "user_id", None)
+    if user_id and hasattr(context, "application") and context.application and hasattr(context.application, "user_data") and context.application.user_data:
+        context.application.user_data.get(user_id, {}).pop("active_view", None)
 
     if chat_id:
         try:
@@ -165,12 +168,14 @@ async def handle_refresh_code(
                     if user:
                         stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
                         acc = (await session.execute(stmt)).scalars().first()
-                        if acc:
-                            code = generate_hotp_code(secret, acc.hotp_counter, digits=digits)
-                            acc.hotp_counter += 1
-                            await session.commit()
-                            await log_action(session, user.id, "view_otp", True, account_id=acc.id)
-                            code_html = format_otp_display(code)
+                        if not acc:
+                            await query.edit_message_text("❌ Akun tidak ditemukan.")
+                            return
+                        code = generate_hotp_code(secret, acc.hotp_counter, digits=digits)
+                        acc.hotp_counter += 1
+                        await session.commit()
+                        await log_action(session, user.id, "view_otp", True, account_id=acc.id)
+                        code_html = format_otp_display(code)
                         msg_text = (
                             f"{emoji} <b>{safe_label}</b> (Counter #{acc.hotp_counter})\n\n"
                             f"{code_html}\n\n"
@@ -236,7 +241,10 @@ async def handle_view_code_menu(
             favorites_only = True
         if query.message and update.effective_chat:
             cancel_view_code_jobs(context, update.effective_chat.id, query.message.message_id)
+            from handlers.view_all_codes import cancel_view_all_jobs
+            cancel_view_all_jobs(context, update.effective_chat.id, query.message.message_id)
             context.user_data.pop("active_view", None)
+            context.user_data.pop("active_view_all", None)
 
     session_factory = context.bot_data.get("session_factory")
     user_id = update.effective_user.id

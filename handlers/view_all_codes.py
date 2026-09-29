@@ -64,10 +64,16 @@ def render_view_all_page(
 
         if acc_type == "hotp":
             counter = acc.get("hotp_counter", 0)
-            code = generate_hotp_code(secret, counter=counter, digits=digits)
+            try:
+                code = generate_hotp_code(secret, counter=counter, digits=digits)
+            except Exception:
+                code = "ERROR"
             status_text = f"(HOTP #{counter})"
         else:
-            code = generate_totp_code(secret, digits=digits, interval=period)
+            try:
+                code = generate_totp_code(secret, digits=digits, interval=period)
+            except Exception:
+                code = "ERROR"
             rem_sec = get_totp_remaining_seconds(interval=period)
             status_text = f"(⏳ {rem_sec}s)"
 
@@ -103,6 +109,12 @@ async def handle_view_all_codes_start(
     query = update.callback_query
     if query:
         await query.answer()
+        if query.message and update.effective_chat:
+            cancel_view_all_jobs(context, update.effective_chat.id, query.message.message_id)
+            from handlers.view_code import cancel_view_code_jobs
+            cancel_view_code_jobs(context, update.effective_chat.id, query.message.message_id)
+            context.user_data.pop("active_view", None)
+            context.user_data.pop("active_view_all", None)
 
     session_factory = context.bot_data.get("session_factory")
     user_id = update.effective_user.id
@@ -199,7 +211,10 @@ async def handle_view_all_pin_keypad(
             user_stmt = select(User).where(User.telegram_user_id == user_id)
             user = (await session.execute(user_stmt)).scalars().first()
             if not user:
-                await query.edit_message_text("❌ User tidak terdaftar.")
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ User tidak terdaftar.", reply_markup=kb)
                 return
 
             is_locked, remaining_seconds = check_lockout(user)
@@ -270,7 +285,10 @@ async def handle_view_all_pin_keypad(
                     continue
 
             if not decrypted_accounts:
-                await query.edit_message_text("❌ Gagal mendekripsi secret akun.")
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ Gagal mendekripsi secret akun.", reply_markup=kb)
                 return
 
             await log_action(session, user.id, "view_all_codes", True)
@@ -283,6 +301,8 @@ async def handle_view_all_pin_keypad(
 
         # Cancel any previous jobs on this message
         cancel_view_all_jobs(context, chat_id, msg_id)
+        from handlers.view_code import cancel_view_code_jobs
+        cancel_view_code_jobs(context, chat_id, msg_id)
 
         context.user_data["active_view_all"] = {
             "accounts": decrypted_accounts,
@@ -355,13 +375,20 @@ async def handle_view_all_page(
     query = update.callback_query
     if not query:
         return
-    await query.answer()
 
     active_session = context.user_data.get("active_view_all")
     if not active_session or time.time() >= active_session.get("expires_at", 0):
-        await query.answer("⏱️ Sesi telah berakhir. Masukkan PIN kembali.", show_alert=True)
+        try:
+            await query.answer("⏱️ Sesi telah berakhir. Masukkan PIN kembali.", show_alert=True)
+        except Exception:
+            pass
         await handle_view_all_codes_start(update, context)
         return
+
+    try:
+        await query.answer()
+    except Exception:
+        pass
 
     accounts = active_session.get("accounts", [])
     total_pages = active_session.get("total_pages", 1)
@@ -500,7 +527,7 @@ async def view_all_auto_delete_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     if context.user_data:
         context.user_data.pop("active_view_all", None)
         clear_keypad_buffer(context.user_data, "view_all_pin")
-    elif user_id and hasattr(context, "application") and context.application and hasattr(context.application, "user_data") and context.application.user_data:
+    if user_id and hasattr(context, "application") and context.application and hasattr(context.application, "user_data") and context.application.user_data:
         u_data = context.application.user_data.get(user_id, {})
         u_data.pop("active_view_all", None)
         clear_keypad_buffer(u_data, "view_all_pin")

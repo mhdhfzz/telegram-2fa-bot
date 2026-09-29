@@ -334,4 +334,38 @@ async def test_handle_refresh_code_hotp_increments_counter(session_factory, seed
         assert refreshed.hotp_counter == 4
 
 
+@pytest.mark.asyncio
+async def test_handle_refresh_code_hotp_account_not_found(session_factory, seed_user_and_totp_account):
+    from handlers.view_code import handle_refresh_code
+    import time
+
+    seed_user, _ = seed_user_and_totp_account
+
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update = MagicMock()
+    update.callback_query = query
+    update.effective_user.id = seed_user.telegram_user_id
+
+    context = MagicMock()
+    context.bot_data = {"session_factory": session_factory}
+    context.user_data = {
+        "active_view": {
+            "account_id": 9999,  # Non-existent account ID
+            "secret": "JBSWY3DPEHPK3PXP",
+            "type": "hotp",
+            "digits": 6,
+            "label": "Missing HOTP",
+            "emoji": "🔢",
+            "expires_at": time.time() + 90,
+        }
+    }
+
+    await handle_refresh_code(update, context, 9999)
+
+    query.edit_message_text.assert_called_once_with("❌ Akun tidak ditemukan.")
+
+
+
 

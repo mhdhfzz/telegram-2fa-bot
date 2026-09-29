@@ -604,6 +604,8 @@ async def handle_view_logs_callback(update: Update, context: ContextTypes.DEFAUL
     log_lines = []
     action_names = {
         "view_code": "Lihat Kode",
+        "view_all_codes": "Lihat Semua Kode",
+        "view_all_pin_fail": "PIN Semua Kode Salah",
         "add_account": "Tambah Akun",
         "delete_account": "Hapus Akun",
         "pin_fail": "PIN Salah",
