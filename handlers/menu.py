@@ -1,10 +1,25 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from typing import Optional
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
+from config import get_settings
 
 
-def get_main_menu_keyboard() -> InlineKeyboardMarkup:
-    keyboard = [
+def get_main_menu_keyboard(mini_app_url: Optional[str] = None) -> InlineKeyboardMarkup:
+    url = mini_app_url or get_settings().mini_app_url
+    keyboard = []
+
+    # Mini App Button
+    if url:
+        keyboard.append([
+            InlineKeyboardButton("📱 Buka Mini App", web_app=WebAppInfo(url=url)),
+        ])
+    else:
+        keyboard.append([
+            InlineKeyboardButton("📱 Mini App Web", callback_data="menu:miniapp_info"),
+        ])
+
+    keyboard.extend([
         [
             InlineKeyboardButton("➕ Tambah Akun", callback_data="menu:add_account"),
             InlineKeyboardButton("🔑 Lihat Kode", callback_data="menu:view_code"),
@@ -20,7 +35,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("⚙️ Pengaturan", callback_data="menu:settings"),
         ],
-    ]
+    ])
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -238,3 +253,52 @@ async def handle_search_query_message(update: Update, context: ContextTypes.DEFA
         "Pilih akun untuk melihat kode OTP:"
     )
     await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_miniapp_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display Mini App details, server status, and BotFather setup instructions."""
+    query = update.callback_query
+    if query:
+        await query.answer()
+
+    settings = get_settings()
+    server_status = "🟢 Aktif" if settings.mini_app_enabled else "🔴 Nonaktif"
+    port = settings.mini_app_port
+    url = settings.mini_app_url
+
+    url_display = f"`{url}`" if url else "_(Belum diatur di .env / MINI_APP_URL)_"
+
+    text = (
+        "📱 **Telegram Mini App (Web App) 2FA**\n\n"
+        "Mini App menghadirkan antarmuka web interaktif langsung di dalam Telegram dengan fitur:\n"
+        "• ⚡ Countdown timer detik demi detik tanpa lag\n"
+        "• 🎨 Logo platform resmi dari **Simple Icons** (simpleicons.org)\n"
+        "• 📋 1-tap copy kode OTP ke clipboard\n"
+        "• 📷 Scan QR Code langsung lewat kamera Telegram\n"
+        "• 🔐 Otentikasi aman terenkripsi PIN Master Anda\n\n"
+        "⚙️ **Status Server:**\n"
+        f"• Web Server: {server_status} (Port `{port}`)\n"
+        f"• Public URL: {url_display}\n\n"
+        "💡 **Cara Menghubungkan ke BotFather:**\n"
+        "1. Pasang HTTPS (via Nginx SSL, Cloudflare Tunnel, atau ngrok).\n"
+        "2. Buka @BotFather -> `/setmenubutton` atau `/newapp`.\n"
+        "3. Masukkan URL HTTPS Mini App Anda.\n"
+        "4. Tambahkan `MINI_APP_URL=https://domain-anda.com` ke file `.env`.\n\n"
+        "_Lihat panduan lengkap di panduan `docs/BOTFATHER_MINI_APP_GUIDE.md`._"
+    )
+
+    buttons = []
+    if url:
+        buttons.append([InlineKeyboardButton("🚀 Buka Mini App", web_app=WebAppInfo(url=url))])
+    buttons.append([InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")])
+
+    markup = InlineKeyboardMarkup(buttons)
+
+    if query:
+        try:
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except Exception:
+            pass
+    elif update.message:
+        await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+

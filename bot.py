@@ -33,6 +33,7 @@ from handlers.manage_account import (
     handle_toggle_favorite,
 )
 from handlers.menu import (
+    handle_miniapp_info,
     handle_search_account_prompt,
     handle_search_query_message,
     show_main_menu,
@@ -111,6 +112,8 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await handle_settings_menu(update, context)
     elif data == "menu:favorite_accounts":
         await handle_view_code_menu(update, context, favorites_only=True)
+    elif data == "menu:miniapp_info":
+        await handle_miniapp_info(update, context)
     elif data == "menu:search_account":
         await handle_search_account_prompt(update, context)
     elif data == "add_acc:scan_qr":
@@ -240,8 +243,32 @@ async def on_startup(app: Application) -> None:
         await init_db(engine)
         logger.info("Database initialized successfully.")
 
+    settings = app.bot_data.get("settings") or get_settings()
+    session_factory = app.bot_data.get("session_factory")
+    if settings.mini_app_enabled and session_factory:
+        try:
+            from mini_app.server import start_mini_app_server
+            runner = await start_mini_app_server(
+                bot_token=settings.bot_token,
+                session_factory=session_factory,
+                host=settings.mini_app_host,
+                port=settings.mini_app_port,
+            )
+            app.bot_data["mini_app_runner"] = runner
+            logger.info("Mini App web server running on %s:%d", settings.mini_app_host, settings.mini_app_port)
+        except Exception as exc:
+            logger.error("Failed to start Mini App web server: %s", exc)
+
 
 async def on_shutdown(app: Application) -> None:
+    runner = app.bot_data.get("mini_app_runner")
+    if runner:
+        try:
+            await runner.cleanup()
+            logger.info("Mini App web server runner cleaned up cleanly.")
+        except Exception as exc:
+            logger.warning("Error cleaning up Mini App web server runner: %s", exc)
+
     engine = app.bot_data.get("engine")
     if engine:
         await engine.dispose()
@@ -312,6 +339,7 @@ def create_application(
     app.bot_data["settings"] = settings
 
     app.add_handler(CommandHandler("start", handle_start_command))
+    app.add_handler(CommandHandler("miniapp", handle_miniapp_info))
     app.add_handler(CallbackQueryHandler(callback_router))
     app.add_handler(MessageHandler(filters.PHOTO, handle_qr_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, document_message_dispatcher))

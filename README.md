@@ -4,12 +4,12 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram_Bot_API-v20+-2CA5E0.svg?logo=telegram&logoColor=white)](https://python-telegram-bot.org/)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM%20%7C%20Argon2id-green.svg)](https://cryptography.io/)
-[![Tests](https://img.shields.io/badge/Tests-100%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
+[![Tests](https://img.shields.io/badge/Tests-104%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
 [![Demo Bot](https://img.shields.io/badge/Demo_Bot-@VexAuthKey__bot-26A5E4.svg?logo=telegram&logoColor=white)](https://t.me/VexAuthKey_bot)
 
 Bot Telegram yang berfungsi sebagai aplikasi *two-factor authenticator* mandiri (seperti Google Authenticator / Authy), dihosting di VPS menggunakan Python. Bot mendukung multi-tenant dengan data antar-pengguna terisolasi penuh dan dienkripsi kuat menggunakan PIN pribadi masing-masing user.
 
-Seluruh navigasi berbasis **inline button** dan **inline numeric keypad**, sehingga PIN tidak pernah diketik secara terbuka di chat Telegram.
+Seluruh navigasi berbasis **inline button**, **inline numeric keypad**, dan **Telegram Mini App (Web App)** modern, sehingga PIN tidak pernah diketik secara terbuka di chat Telegram.
 
 > 🛡️ **PENTING: Privasi Data & Jaminan Nol Penyimpanan di Telegram (Zero Telegram Storage)**:  
 > Bot ini **SAMA SEKALI TIDAK MENYIMPAN** data akun, secret key, PIN, maupun recovery phrase Anda di server atau cloud Telegram. Seluruh data disimpan secara lokal pada database server mandiri (Self-Hosted VPS), dan dienkripsi kuat dengan standar **AES-256-GCM** menggunakan kunci yang diturunkan langsung dari PIN pribadi Anda (**Zero Master Key**). Telegram hanya berfungsi sebagai antarmuka transport pesan sementara, di mana pesan sensitif (OTP, secret, QR, passphrase) otomatis langsung dihapus dari chat.
@@ -20,6 +20,8 @@ Seluruh navigasi berbasis **inline button** dan **inline numeric keypad**, sehin
 
 ## ✨ Fitur Utama
 
+- 📱 **Telegram Mini App (Web App)**: Antarmuka web modern interaktif langsung di dalam Telegram. Dilengkapi tampilan daftar akun beranimasi, timer lingkaran real-time detik demi detik, 1-tap copy dengan Haptic Feedback, dan pemindaian QR Code langsung via kamera Telegram (`showScanQrPopup`).
+- 🎨 **Integrasi Simple Icons (simpleicons.org)**: Menampilkan logo vektor SVG resmi Simple Icons untuk 200+ platform/issuer (Google, GitHub, Discord, Steam, AWS, Tokopedia, Binance, dll.) dengan fallback emoji cerdas berpresisi tinggi.
 - 🔒 **Zero Master Key**: Server tidak memiliki master key. Kunci enkripsi diturunkan langsung dari PIN user + salt unik menggunakan **Argon2id**.
 - 🛡️ **Zero Cloud / Telegram Storage**: Server Telegram **sama sekali tidak menyimpan** data akun atau rahasia Anda. Semua database akun berada di VPS lokal milik host, dan seluruh rahasia dienkripsi sehingga bahkan pemilik VPS atau Telegram tidak dapat membaca kode OTP tanpa PIN Anda.
 - 🛡️ **Enkripsi AES-256-GCM**: Setiap secret akun dienkripsi secara independen dengan nonce 12-byte unik dan verifikasi authentication tag anti-tampering.
@@ -62,6 +64,10 @@ Seluruh navigasi berbasis **inline button** dan **inline numeric keypad**, sehin
 ├── config.py                  # Pydantic Settings & environment loader
 ├── .env.example               # Template environment variables
 ├── requirements.txt           # Dependensi Python
+├── mini_app/                  # Telegram Mini App (Web App) Backend & Frontend
+│   ├── server.py              # Web server aiohttp & REST API endpoints
+│   ├── crypto_utils.py        # Validasi kriptografis initData & session manager
+│   └── static/                # Frontend assets (index.html, style.css, app.js)
 ├── db/
 │   ├── models.py              # Model SQLAlchemy 2.0 (User, Account, AccessLog)
 │   └── session.py             # Engine & async_sessionmaker (aiosqlite)
@@ -72,23 +78,25 @@ Seluruh navigasi berbasis **inline button** dan **inline numeric keypad**, sehin
 ├── services/
 │   ├── otp_service.py         # Generator TOTP / HOTP (pyotp) & visual countdown
 │   ├── qr_service.py          # Decoder QR code (pyzbar + fallback OpenCV) & encoder
-│   ├── icon_service.py        # Pemetaan otomatis issuer ke emoji
+│   ├── icon_service.py        # Pemetaan otomatis issuer ke Simple Icons SVG & emoji
 │   ├── lockout_service.py     # Exponential lockout & counter percobaan gagal
 │   ├── log_service.py         # Pencatatan audit log & pagination
 │   └── backup_service.py      # Ekspor/impor cadangan JSON terenkripsi
 ├── handlers/
 │   ├── keypad.py              # Reusable inline numeric keypad handler
 │   ├── start.py               # /start & alur registrasi PIN awal
-│   ├── menu.py                # Menu navigasi dashboard
+│   ├── menu.py                # Menu navigasi dashboard & /miniapp
 │   ├── add_account.py         # Alur scan QR & input manual secret
 │   ├── view_code.py           # Tampilan OTP monospace, timer, & dynamic countdown refresh
 │   ├── view_all_codes.py      # Tampilan semua kode OTP, pagination & periodic refresh
 │   ├── manage_account.py      # Kelola label, status favorit, & hapus akun
 │   └── settings.py            # Ganti PIN, ekspor/impor, & lihat log akses
+├── docs/
+│   └── BOTFATHER_MINI_APP_GUIDE.md # Panduan lengkap integrasi BotFather & HTTPS proxy
 ├── deploy/
 │   ├── telegram-2fa-bot.service # Unit file systemd untuk Linux VPS
 │   └── README-deploy.md       # Panduan deployment lengkap di VPS
-└── tests/                     # 83 Automated unit & integration tests (pytest)
+└── tests/                     # 104 Automated unit & integration tests (pytest)
 ```
 
 ---

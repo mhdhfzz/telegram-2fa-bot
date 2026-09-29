@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     pin_length: int = 6
     auto_delete_seconds: int = 90
+    mini_app_enabled: bool = True
+    mini_app_host: str = "0.0.0.0"
+    mini_app_port: int = 8080
+    mini_app_url: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>2FA Authenticator Mini App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="logo-shield">
+          <svg viewBox="0 0 24 24" class="shield-svg" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">MFA Guard</h1>
+          <span class="user-greeting" id="userGreeting">Mengamankan akun Anda</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnOpenAddModal" class="btn-icon" title="Tambah Akun">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        </button>
+        <button id="btnLockApp" class="btn-icon" title="Kunci">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Screen: Loading -->
+    <div id="screenLoading" class="screen active">
+      <div class="loading-container">
+        <div class="spinner"></div>
+        <p class="loading-text">Menghubungkan ke Telegram...</p>
+      </div>
+    </div>
+
+    <!-- Screen: Unregistered / Need Start -->
+    <div id="screenNotRegistered" class="screen">
+      <div class="center-card">
+        <div class="icon-bubble warning-bubble">⚠️</div>
+        <h2>Akun Belum Siap</h2>
+        <p id="notRegisteredMsg">Anda belum menyelesaikan pendaftaran PIN di bot Telegram.</p>
+        <p class="subtext">Silakan kembali ke chat bot dan ketik <code>/start</code> untuk mengatur 6-digit Master PIN Anda.</p>
+        <button id="btnCloseApp" class="btn-primary">Kembali ke Bot</button>
+      </div>
+    </div>
+
+    <!-- Screen: Lock / Enter PIN -->
+    <div id="screenLock" class="screen">
+      <div class="pin-auth-container">
+        <div class="auth-icon-wrap">
+          <div class="auth-icon-glow"></div>
+          <div class="auth-icon">🔐</div>
+        </div>
+        <h2 class="auth-title">Masukkan PIN Anda</h2>
+        <p class="auth-subtitle">PIN 6-digit Master MFA Anda untuk mendekripsi akun</p>
+
+        <!-- PIN Dots Display -->
+        <div class="pin-dots-row" id="pinDotsRow">
+          <div class="pin-dot"></div>
+          <div class="pin-dot"></div>
+          <div class="pin-dot"></div>
+          <div class="pin-dot"></div>
+          <div class="pin-dot"></div>
+          <div class="pin-dot"></div>
+        </div>
+
+        <div id="pinErrorMsg" class="pin-error-text"></div>
+        <div id="pinLockoutMsg" class="pin-lockout-text"></div>
+
+        <!-- Numeric Keypad -->
+        <div class="keypad-grid">
+          <button class="keypad-btn" data-key="1">1</button>
+          <button class="keypad-btn" data-key="2">2</button>
+          <button class="keypad-btn" data-key="3">3</button>
+          <button class="keypad-btn" data-key="4">4</button>
+          <button class="keypad-btn" data-key="5">5</button>
+          <button class="keypad-btn" data-key="6">6</button>
+          <button class="keypad-btn" data-key="7">7</button>
+          <button class="keypad-btn" data-key="8">8</button>
+          <button class="keypad-btn" data-key="9">9</button>
+          <button class="keypad-btn action-key" data-key="clear" title="Clear">C</button>
+          <button class="keypad-btn" data-key="0">0</button>
+          <button class="keypad-btn action-key" data-key="backspace" title="Hapus">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="svg-inline">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9.75L14.25 12m0 0l2.25 2.25M14.25 12l2.25-2.25M14.25 12L12 14.25m-2.58 4.92l-6.375-6.375a1.125 1.125 0 010-1.59L9.42 4.83c.211-.211.498-.33.796-.33H19.5a2.25 2.25 0 012.25 2.25v10.5a2.25 2.25 0 01-2.25 2.25h-9.284c-.298 0-.585-.119-.796-.33z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Screen: Dashboard / Accounts List -->
+    <div id="screenDashboard" class="screen">
+      <!-- Search & Filters -->
+      <div class="search-filter-section">
+        <div class="search-bar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="search-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+          <input type="text" id="searchInput" placeholder="Cari akun atau platform..." autocomplete="off">
+          <button id="btnClearSearch" class="btn-clear-search hidden">✕</button>
+        </div>
+        <div class="filter-pills">
+          <button class="filter-pill active" data-filter="all">Semua</button>
+          <button class="filter-pill" data-filter="favorite">⭐ Favorit</button>
+          <button class="filter-pill" data-filter="totp">TOTP</button>
+          <button class="filter-pill" data-filter="hotp">HOTP</button>
+        </div>
+      </div>
+
+      <!-- Accounts Container -->
+      <div class="accounts-container" id="accountsList">
+        <!-- Rendered dynamically via app.js -->
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="empty-state hidden">
+        <div class="empty-icon">📭</div>
+        <h3>Belum Ada Akun</h3>
+        <p>Mulai tambahkan akun 2FA pertama Anda dengan memindai QR Code atau input manual.</p>
+        <button id="btnEmptyAdd" class="btn-primary">➕ Tambah Akun Sekarang</button>
+      </div>
+    </div>
+
+    <!-- Modal: Add Account -->
+    <div id="modalAddAccount" class="modal">
+      <div class="modal-backdrop" id="modalBackdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Tambah Akun 2FA</h2>
+          <button id="btnCloseModal" class="btn-close-modal">✕</button>
+        </div>
+
+        <!-- Quick Scan QR Button (Telegram Native Camera) -->
+        <div class="qr-scan-promo">
+          <button id="btnScanQrCode" class="btn-scan-qr">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="scan-svg"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5zM13.5 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5z"/></svg>
+            <span>Scan QR Code (Kamera Telegram)</span>
+          </button>
+          <div class="divider-text"><span>atau masukkan manual</span></div>
+        </div>
+
+        <form id="formAddAccount" class="modal-form">
+          <div class="form-group">
+            <label for="inputLabel">Nama Akun / Email <span class="required">*</span></label>
+            <input type="text" id="inputLabel" placeholder="contoh: user@gmail.com" required autocomplete="off">
+          </div>
+
+          <div class="form-group">
+            <label for="inputIssuer">Issuer / Platform</label>
+            <input type="text" id="inputIssuer" placeholder="contoh: Google, GitHub, Discord..." autocomplete="off">
+            <span class="field-hint">Logo Simple Icons & emoji akan otomatis disesuaikan.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="inputSecret">Secret Key (Base32) <span class="required">*</span></label>
+            <input type="text" id="inputSecret" placeholder="JBSWY3DPEHPK3PXP..." required autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group half">
+              <label for="selectType">Tipe</label>
+              <select id="selectType">
+                <option value="totp" selected>TOTP (Waktu)</option>
+                <option value="hotp">HOTP (Counter)</option>
+              </select>
+            </div>
+            <div class="form-group half">
+              <label for="selectDigits">Digit</label>
+              <select id="selectDigits">
+                <option value="6" selected>6 Digit</option>
+                <option value="8">8 Digit</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="addErrorMsg" class="form-error-msg hidden"></div>
+
+          <div class="modal-actions">
+            <button type="button" id="btnCancelAdd" class="btn-secondary">Batal</button>
+            <button type="submit" id="btnSubmitAdd" class="btn-primary">Simpan Akun</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div id="toast" class="toast">
+      <span id="toastIcon" class="toast-icon">✅</span>
+      <span id="toastMessage" class="toast-msg">Kode berhasil disalin!</span>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

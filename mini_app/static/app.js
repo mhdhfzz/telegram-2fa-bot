@@ -1,0 +1,718 @@
+/**
+ * Telegram 2FA Authenticator Mini App
+ * Fully client-side interactive logic, PIN keypad, live TOTP countdown,
+ * Simple Icons integration, and native Telegram QR code scanner.
+ */
+
+(function () {
+  'use strict';
+
+  // State
+  const state = {
+    initData: '',
+    sessionToken: '',
+    pinBuffer: '',
+    pinLength: 6,
+    accounts: [],
+    currentFilter: 'all',
+    searchQuery: '',
+    isLocked: false,
+    lockoutTimer: null,
+  };
+
+  // Telegram WebApp Object
+  const tg = window.Telegram?.WebApp;
+
+  // DOM Elements
+  const el = {
+    userGreeting: document.getElementById('userGreeting'),
+    btnOpenAddModal: document.getElementById('btnOpenAddModal'),
+    btnLockApp: document.getElementById('btnLockApp'),
+    screenLoading: document.getElementById('screenLoading'),
+    screenNotRegistered: document.getElementById('screenNotRegistered'),
+    notRegisteredMsg: document.getElementById('notRegisteredMsg'),
+    btnCloseApp: document.getElementById('btnCloseApp'),
+    screenLock: document.getElementById('screenLock'),
+    pinDotsRow: document.getElementById('pinDotsRow'),
+    pinErrorMsg: document.getElementById('pinErrorMsg'),
+    pinLockoutMsg: document.getElementById('pinLockoutMsg'),
+    screenDashboard: document.getElementById('screenDashboard'),
+    searchInput: document.getElementById('searchInput'),
+    btnClearSearch: document.getElementById('btnClearSearch'),
+    filterPills: document.querySelectorAll('.filter-pill'),
+    accountsList: document.getElementById('accountsList'),
+    emptyState: document.getElementById('emptyState'),
+    btnEmptyAdd: document.getElementById('btnEmptyAdd'),
+    modalAddAccount: document.getElementById('modalAddAccount'),
+    modalBackdrop: document.getElementById('modalBackdrop'),
+    btnCloseModal: document.getElementById('btnCloseModal'),
+    btnCancelAdd: document.getElementById('btnCancelAdd'),
+    btnScanQrCode: document.getElementById('btnScanQrCode'),
+    formAddAccount: document.getElementById('formAddAccount'),
+    inputLabel: document.getElementById('inputLabel'),
+    inputIssuer: document.getElementById('inputIssuer'),
+    inputSecret: document.getElementById('inputSecret'),
+    selectType: document.getElementById('selectType'),
+    selectDigits: document.getElementById('selectDigits'),
+    addErrorMsg: document.getElementById('addErrorMsg'),
+    toast: document.getElementById('toast'),
+    toastIcon: document.getElementById('toastIcon'),
+    toastMessage: document.getElementById('toastMessage'),
+  };
+
+  // --- Initialize Telegram WebApp ---
+  function initTelegram() {
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      try {
+        tg.enableClosingConfirmation();
+      } catch (e) {}
+
+      // Apply Telegram theme classes if available
+      if (tg.colorScheme === 'dark') {
+        document.body.classList.add('tg-theme');
+      }
+
+      state.initData = tg.initData || '';
+
+      const user = tg.initDataUnsafe?.user;
+      if (user && user.first_name) {
+        el.userGreeting.textContent = `Halo, ${user.first_name}`;
+      }
+    }
+  }
+
+  // --- Screen Switching ---
+  function showScreen(screenEl) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    screenEl.classList.add('active');
+  }
+
+  // --- Toast Notification ---
+  let toastTimeout;
+  function showToast(msg, icon = '✅', duration = 2500) {
+    el.toastMessage.textContent = msg;
+    el.toastIcon.textContent = icon;
+    el.toast.classList.add('show');
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+      el.toast.classList.remove('show');
+    }, duration);
+  }
+
+  // --- API Helper ---
+  async function apiFetch(endpoint, options = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    };
+    if (state.sessionToken) {
+      headers['Authorization'] = `Bearer ${state.sessionToken}`;
+      headers['X-Session-Token'] = state.sessionToken;
+    }
+    if (state.initData) {
+      headers['X-Telegram-Init-Data'] = state.initData;
+    }
+
+    const res = await fetch(endpoint, {
+      ...options,
+      headers,
+    });
+    return res;
+  }
+
+  // --- App Startup Check ---
+  async function checkInit() {
+    showScreen(el.screenLoading);
+
+    // If initData is empty (opened directly in regular browser outside Telegram)
+    if (!state.initData) {
+      // In development or test, we show a helpful message
+      showScreen(el.screenNotRegistered);
+      el.notRegisteredMsg.textContent = 'Aplikasi ini didesain untuk dijalankan di dalam Telegram Mini App.';
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/api/init', {
+        method: 'POST',
+        body: JSON.stringify({ init_data: state.initData }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.registered) {
+        showScreen(el.screenNotRegistered);
+        if (data.message) {
+          el.notRegisteredMsg.textContent = data.message;
+        }
+        return;
+      }
+
+      state.pinLength = data.pin_length || 6;
+      if (data.is_locked) {
+        startLockoutCountdown(data.lockout_seconds);
+      }
+
+      showScreen(el.screenLock);
+      renderPinDots();
+    } catch (err) {
+      console.error('Init error:', err);
+      showScreen(el.screenNotRegistered);
+      el.notRegisteredMsg.textContent = 'Gagal terhubung ke server. Periksa koneksi internet Anda.';
+    }
+  }
+
+  // --- PIN Keypad Handling ---
+  function renderPinDots() {
+    const dots = el.pinDotsRow.querySelectorAll('.pin-dot');
+    dots.forEach((dot, index) => {
+      if (index < state.pinBuffer.length) {
+        dot.classList.add('filled');
+      } else {
+        dot.classList.remove('filled');
+      }
+    });
+  }
+
+  function handleKeypadPress(key) {
+    if (state.isLocked) return;
+
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.impactOccurred('light');
+    }
+
+    if (key === 'clear') {
+      state.pinBuffer = '';
+      el.pinErrorMsg.textContent = '';
+      renderPinDots();
+      return;
+    }
+
+    if (key === 'backspace') {
+      state.pinBuffer = state.pinBuffer.slice(0, -1);
+      el.pinErrorMsg.textContent = '';
+      renderPinDots();
+      return;
+    }
+
+    if (state.pinBuffer.length < state.pinLength) {
+      state.pinBuffer += key;
+      renderPinDots();
+
+      if (state.pinBuffer.length === state.pinLength) {
+        submitPin(state.pinBuffer);
+      }
+    }
+  }
+
+  async function submitPin(pin) {
+    el.pinErrorMsg.textContent = 'Memverifikasi PIN...';
+    try {
+      const res = await apiFetch('/api/auth/pin', {
+        method: 'POST',
+        body: JSON.stringify({
+          init_data: state.initData,
+          pin: pin,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        state.pinBuffer = '';
+        renderPinDots();
+
+        if (tg?.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred('error');
+        }
+
+        if (data.is_locked) {
+          startLockoutCountdown(data.lockout_seconds);
+        } else {
+          el.pinErrorMsg.textContent = data.error || 'PIN salah. Silakan coba lagi.';
+          shakePinDots();
+        }
+        return;
+      }
+
+      // Success!
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
+
+      state.sessionToken = data.token;
+      state.pinBuffer = '';
+      el.pinErrorMsg.textContent = '';
+      showToast('PIN Terverifikasi', '🔓');
+
+      await loadAccounts();
+      showScreen(el.screenDashboard);
+    } catch (err) {
+      state.pinBuffer = '';
+      renderPinDots();
+      el.pinErrorMsg.textContent = 'Terjadi kesalahan jaringan saat verifikasi.';
+    }
+  }
+
+  function shakePinDots() {
+    el.pinDotsRow.style.animation = 'shake 0.35s ease';
+    setTimeout(() => {
+      el.pinDotsRow.style.animation = '';
+    }, 400);
+  }
+
+  function startLockoutCountdown(seconds) {
+    state.isLocked = true;
+    let rem = seconds;
+    clearInterval(state.lockoutTimer);
+
+    function update() {
+      if (rem <= 0) {
+        clearInterval(state.lockoutTimer);
+        state.isLocked = false;
+        el.pinLockoutMsg.textContent = '';
+        return;
+      }
+      el.pinLockoutMsg.textContent = `⏳ Terkunci! Coba lagi dalam ${rem} detik`;
+      rem--;
+    }
+    update();
+    state.lockoutTimer = setInterval(update, 1000);
+  }
+
+  // --- Accounts Management ---
+  async function loadAccounts() {
+    try {
+      const res = await apiFetch('/api/accounts');
+      if (res.status === 401) {
+        // Session expired, lock screen
+        lockApp();
+        return;
+      }
+      const data = await res.json();
+      state.accounts = data.accounts || [];
+      renderAccounts();
+    } catch (err) {
+      console.error('Failed to load accounts:', err);
+    }
+  }
+
+  function filterAccounts() {
+    return state.accounts.filter(acc => {
+      // Category filter
+      if (state.currentFilter === 'favorite' && !acc.is_favorite) return false;
+      if (state.currentFilter === 'totp' && acc.type !== 'totp') return false;
+      if (state.currentFilter === 'hotp' && acc.type !== 'hotp') return false;
+
+      // Search query
+      if (state.searchQuery) {
+        const q = state.searchQuery.toLowerCase();
+        const label = (acc.label || '').toLowerCase();
+        const issuer = (acc.issuer || '').toLowerCase();
+        return label.includes(q) || issuer.includes(q);
+      }
+      return true;
+    });
+  }
+
+  function renderAccounts() {
+    const filtered = filterAccounts();
+    el.accountsList.innerHTML = '';
+
+    if (filtered.length === 0) {
+      el.emptyState.classList.remove('hidden');
+      return;
+    }
+    el.emptyState.classList.add('hidden');
+
+    filtered.forEach(acc => {
+      const card = createAccountCard(acc);
+      el.accountsList.appendChild(card);
+    });
+  }
+
+  function createAccountCard(acc) {
+    const card = document.createElement('div');
+    card.className = `account-card ${acc.is_favorite ? 'favorite' : ''}`;
+    card.dataset.id = acc.id;
+
+    // Platform Logo / Avatar
+    // Uses Simple Icons SVG CDN if slug is present, with fallback to emoji badge
+    let avatarHtml = '';
+    if (acc.slug) {
+      const svgUrl = `https://cdn.simpleicons.org/${acc.slug}/white`;
+      avatarHtml = `
+        <div class="brand-avatar" title="${acc.issuer || 'Account'}">
+          <img class="brand-svg-img" src="${svgUrl}" alt="${acc.issuer || ''}"
+               onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\'brand-emoji-fallback\\'>${acc.emoji || '🔐'}</span>';">
+        </div>
+      `;
+    } else {
+      avatarHtml = `
+        <div class="brand-avatar">
+          <span class="brand-emoji-fallback">${acc.emoji || '🔐'}</span>
+        </div>
+      `;
+    }
+
+    // OTP Code display formatting
+    const rawCode = acc.code || '------';
+    const formattedCode = rawCode.length === 6 ? `${rawCode.slice(0, 3)} ${rawCode.slice(3)}` : rawCode;
+
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="brand-info">
+          ${avatarHtml}
+          <div class="meta-texts">
+            <span class="account-label">${escapeHtml(acc.label)}</span>
+            <span class="account-issuer">${escapeHtml(acc.issuer || '2FA')}</span>
+          </div>
+        </div>
+        <div class="card-actions-top">
+          <button class="btn-star ${acc.is_favorite ? 'active' : ''}" title="Favorit" data-action="favorite">
+            ${acc.is_favorite ? '⭐' : '☆'}
+          </button>
+          <button class="btn-card-del" title="Hapus Akun" data-action="delete">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card-bottom">
+        <div class="otp-code-box" data-action="copy">
+          <span class="otp-code" id="code-${acc.id}">${formattedCode}</span>
+          <span class="code-type-badge">${acc.type.toUpperCase()}</span>
+        </div>
+        <div class="timer-copy-wrap">
+          ${acc.type === 'totp' ? createTimerSvg(acc) : ''}
+          <button class="btn-copy" data-action="copy">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/>
+            </svg>
+            <span>Salin</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Event Delegation on card
+    card.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+
+      if (action === 'copy') {
+        copyCode(rawCode);
+      } else if (action === 'favorite') {
+        toggleFavorite(acc.id);
+      } else if (action === 'delete') {
+        confirmDelete(acc.id, acc.label);
+      }
+    });
+
+    return card;
+  }
+
+  function createTimerSvg(acc) {
+    const period = acc.period || 30;
+    const rem = acc.remaining_seconds != null ? acc.remaining_seconds : period;
+    const radius = 13;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference * (1 - rem / period);
+
+    return `
+      <div class="timer-circle-wrap" id="timer-wrap-${acc.id}">
+        <svg class="timer-svg" viewBox="0 0 34 34">
+          <circle class="timer-bg" cx="17" cy="17" r="${radius}" fill="none"/>
+          <circle class="timer-progress ${rem <= 5 ? 'warning' : ''}" id="timer-ring-${acc.id}"
+                  cx="17" cy="17" r="${radius}" fill="none"
+                  stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>
+        </svg>
+        <span class="timer-text" id="timer-text-${acc.id}">${rem}s</span>
+      </div>
+    `;
+  }
+
+  function copyCode(code) {
+    const clean = String(code).replace(/\s+/g, '');
+    navigator.clipboard.writeText(clean).then(() => {
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
+      showToast(`Kode ${clean} berhasil disalin!`, '📋');
+    }).catch(() => {
+      showToast('Gagal menyalin kode', '❌');
+    });
+  }
+
+  async function toggleFavorite(id) {
+    const acc = state.accounts.find(a => a.id === id);
+    if (!acc) return;
+
+    try {
+      const res = await apiFetch(`/api/accounts/${id}/favorite`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        acc.is_favorite = data.is_favorite;
+        if (tg?.HapticFeedback) {
+          tg.HapticFeedback.impactOccurred('medium');
+        }
+        renderAccounts();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function confirmDelete(id, label) {
+    const confirmMsg = `Apakah Anda yakin ingin menghapus akun "${label}"? Tindakan ini tidak dapat dibatalkan.`;
+
+    if (tg?.showConfirm) {
+      tg.showConfirm(confirmMsg, (confirmed) => {
+        if (confirmed) doDeleteAccount(id);
+      });
+    } else {
+      if (window.confirm(confirmMsg)) {
+        doDeleteAccount(id);
+      }
+    }
+  }
+
+  async function doDeleteAccount(id) {
+    try {
+      const res = await apiFetch(`/api/accounts/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        state.accounts = state.accounts.filter(a => a.id !== id);
+        if (tg?.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred('warning');
+        }
+        showToast('Akun berhasil dihapus', '🗑️');
+        renderAccounts();
+      }
+    } catch (err) {
+      showToast('Gagal menghapus akun', '❌');
+    }
+  }
+
+  // --- Real-Time 1-Second Countdown Ticker ---
+  function updateCountdowns() {
+    if (state.accounts.length === 0) return;
+
+    const now = Math.floor(Date.now() / 1000);
+    const radius = 13;
+    const circumference = 2 * Math.PI * radius;
+
+    state.accounts.forEach(acc => {
+      if (acc.type !== 'totp') return;
+
+      const period = acc.period || 30;
+      const rem = period - (now % period);
+
+      const ringEl = document.getElementById(`timer-ring-${acc.id}`);
+      const textEl = document.getElementById(`timer-text-${acc.id}`);
+      const codeEl = document.getElementById(`code-${acc.id}`);
+
+      if (ringEl && textEl) {
+        const offset = circumference * (1 - rem / period);
+        ringEl.style.strokeDashoffset = offset;
+        textEl.textContent = `${rem}s`;
+
+        if (rem <= 5) {
+          ringEl.classList.add('warning');
+          if (codeEl) codeEl.classList.add('warning');
+        } else {
+          ringEl.classList.remove('warning');
+          if (codeEl) codeEl.classList.remove('warning');
+        }
+      }
+
+      // If rolled over, refresh account codes from server
+      if (rem === period) {
+        loadAccounts();
+      }
+    });
+  }
+
+  // Start ticker
+  setInterval(updateCountdowns, 1000);
+
+  // --- Add Account Modal & Telegram QR Scanner ---
+  function openAddModal() {
+    el.formAddAccount.reset();
+    el.addErrorMsg.classList.add('hidden');
+    el.modalAddAccount.classList.add('active');
+  }
+
+  function closeAddModal() {
+    el.modalAddAccount.classList.remove('active');
+  }
+
+  // Telegram Native QR Scanner Integration
+  function scanQrWithTelegram() {
+    if (!tg?.showScanQrPopup) {
+      showToast('Fitur scanner hanya aktif di Telegram', '⚠️');
+      return;
+    }
+
+    tg.showScanQrPopup({ text: 'Arahkan kamera ke QR Code 2FA' }, (scannedText) => {
+      if (!scannedText) return false;
+
+      try {
+        parseOtpauthUri(scannedText);
+        tg.closeScanQrPopup();
+        showToast('QR Code berhasil dipindai!', '📷');
+        return true;
+      } catch (err) {
+        showToast('Format QR Code tidak valid', '❌');
+        return false;
+      }
+    });
+  }
+
+  function parseOtpauthUri(uri) {
+    if (!uri.toLowerCase().startsWith('otpauth://')) {
+      throw new Error('Not otpauth');
+    }
+    const url = new URL(uri);
+    const type = url.host.toLowerCase();
+    const path = decodeURIComponent(url.pathname.replace(/^\//, ''));
+    let label = path;
+    let issuer = url.searchParams.get('issuer') || '';
+
+    if (path.includes(':')) {
+      const parts = path.split(':');
+      if (!issuer) issuer = parts[0];
+      label = parts.slice(1).join(':').trim();
+    }
+
+    const secret = url.searchParams.get('secret') || '';
+    const digits = url.searchParams.get('digits') || '6';
+    const period = url.searchParams.get('period') || '30';
+
+    el.inputLabel.value = label;
+    el.inputIssuer.value = issuer;
+    el.inputSecret.value = secret;
+    el.selectType.value = type === 'hotp' ? 'hotp' : 'totp';
+    el.selectDigits.value = digits === '8' ? '8' : '6';
+  }
+
+  async function submitAddAccount(e) {
+    e.preventDefault();
+    el.addErrorMsg.classList.add('hidden');
+
+    const label = el.inputLabel.value.trim();
+    const issuer = el.inputIssuer.value.trim();
+    const secret = el.inputSecret.value.trim();
+    const type = el.selectType.value;
+    const digits = parseInt(el.selectDigits.value, 10);
+
+    if (!label || !secret) {
+      el.addErrorMsg.textContent = 'Nama akun dan Secret Key wajib diisi.';
+      el.addErrorMsg.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/api/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ label, issuer, secret, type, digits }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        el.addErrorMsg.textContent = data.error || 'Gagal menambahkan akun.';
+        el.addErrorMsg.classList.remove('hidden');
+        return;
+      }
+
+      closeAddModal();
+      showToast('Akun berhasil ditambahkan!', '✨');
+      await loadAccounts();
+    } catch (err) {
+      el.addErrorMsg.textContent = 'Terjadi kesalahan jaringan saat menyimpan.';
+      el.addErrorMsg.classList.remove('hidden');
+    }
+  }
+
+  // --- Lock App ---
+  function lockApp() {
+    state.sessionToken = '';
+    state.pinBuffer = '';
+    renderPinDots();
+    showScreen(el.screenLock);
+    showToast('Aplikasi terkunci', '🔒');
+  }
+
+  // Helper Escape HTML
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // --- Attach Event Listeners ---
+  function setupEventListeners() {
+    // Keypad clicks
+    document.querySelectorAll('.keypad-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        handleKeypadPress(btn.dataset.key);
+      });
+    });
+
+    // Close app button on unregistered screen
+    el.btnCloseApp.addEventListener('click', () => {
+      if (tg?.close) tg.close();
+    });
+
+    // Header actions
+    el.btnOpenAddModal.addEventListener('click', openAddModal);
+    el.btnEmptyAdd.addEventListener('click', openAddModal);
+    el.btnLockApp.addEventListener('click', lockApp);
+
+    // Modal Add
+    el.btnCloseModal.addEventListener('click', closeAddModal);
+    el.btnCancelAdd.addEventListener('click', closeAddModal);
+    el.modalBackdrop.addEventListener('click', closeAddModal);
+    el.btnScanQrCode.addEventListener('click', scanQrWithTelegram);
+    el.formAddAccount.addEventListener('submit', submitAddAccount);
+
+    // Search
+    el.searchInput.addEventListener('input', (e) => {
+      state.searchQuery = e.target.value.trim();
+      if (state.searchQuery) {
+        el.btnClearSearch.classList.remove('hidden');
+      } else {
+        el.btnClearSearch.classList.add('hidden');
+      }
+      renderAccounts();
+    });
+
+    el.btnClearSearch.addEventListener('click', () => {
+      el.searchInput.value = '';
+      state.searchQuery = '';
+      el.btnClearSearch.classList.add('hidden');
+      renderAccounts();
+    });
+
+    // Filter pills
+    el.filterPills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        el.filterPills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        state.currentFilter = pill.dataset.filter;
+        renderAccounts();
+      });
+    });
+  }
+
+  // Start app
+  initTelegram();
+  setupEventListeners();
+  checkInit();
+})();

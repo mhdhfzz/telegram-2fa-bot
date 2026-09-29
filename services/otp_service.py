@@ -27,7 +27,8 @@ def get_totp_remaining_seconds(interval: int = 30) -> int:
     if not isinstance(interval, int) or interval <= 0:
         interval = 30
     current_timestamp = time.time()
-    return int(interval - (current_timestamp % interval))
+    rem = int(math.ceil(interval - (current_timestamp % interval)))
+    return max(1, min(rem, interval))
 
 
 def generate_hotp_code(secret: str, counter: int, digits: int = 6) -> str:
