@@ -132,19 +132,32 @@ DB_PATH=2fa_bot.db
 LOG_LEVEL=INFO
 PIN_LENGTH=6
 AUTO_DELETE_SECONDS=90
+
+# Konfigurasi Telegram Mini App (Opsional)
+MINI_APP_ENABLED=true
+MINI_APP_HOST=0.0.0.0
+MINI_APP_PORT=8080
+MINI_APP_URL=
 ```
 
 ### 4. Jalankan Bot
 ```bash
 python bot.py
 ```
-Buka Telegram, cari bot Anda atau uji melalui bot demo [@VexAuthKey_bot](https://t.me/VexAuthKey_bot), lalu kirim perintah `/start`.
+Buka Telegram, cari bot Anda atau uji melalui bot demo [@VexAuthKey_bot](https://t.me/VexAuthKey_bot), lalu kirim perintah `/start` atau buka Mini App via `/miniapp`.
+
+---
+
+## 📱 Panduan Konfigurasi Telegram Mini App & BotFather
+
+Untuk menghubungkan Telegram Mini App dengan tombol menu BotFather (`/setmenubutton` atau `/newapp`) beserta setup HTTPS reverse proxy (Nginx / Cloudflare Tunnel), silakan baca panduan lengkap:
+📖 **[docs/BOTFATHER_MINI_APP_GUIDE.md](docs/BOTFATHER_MINI_APP_GUIDE.md)**
 
 ---
 
 ## 🧪 Pengujian Otomatis (Testing)
 
-Proyek ini memiliki **100 unit dan integration test** yang mencakup seluruh lapisan sistem:
+Proyek ini memiliki **104 unit dan integration test** yang mencakup seluruh lapisan sistem:
 
 ```bash
 pytest -v
@@ -161,22 +174,24 @@ tests/test_db.py ...                                       [ 27%]
 tests/test_keypad.py ......                                [ 33%]
 tests/test_lockout.py ..                                   [ 35%]
 tests/test_lockout_handlers.py .....                       [ 40%]
-tests/test_menu_handlers.py ...........                    [ 51%]
-tests/test_otp.py ..........                               [ 61%]
-tests/test_settings.py ........                            [ 69%]
-tests/test_start_handler.py ......                         [ 75%]
-tests/test_view_all_codes.py ...............               [ 90%]
+tests/test_menu_handlers.py ...........                    [ 50%]
+tests/test_mini_app.py ....                                [ 54%]
+tests/test_otp.py ..........                               [ 63%]
+tests/test_settings.py ........                            [ 71%]
+tests/test_start_handler.py ......                         [ 77%]
+tests/test_view_all_codes.py ...............               [ 91%]
 tests/test_view_code.py ..........                         [100%]
 
-============================ 100 passed in 22.59s =============================
+============================ 104 passed in 24.48s =============================
 ```
 
 ---
 
 ## 🌐 Panduan Deployment di VPS (Production)
 
-Panduan detail konfigurasi Linux VPS (Ubuntu/Debian) dengan user non-root, instalasi pustaka sistem `libzbar0`, systemd service, firewall, dan cron backup harian tersedia di:
+Panduan detail konfigurasi Linux VPS (Ubuntu/Debian) dengan user non-root, instalasi pustaka sistem `libzbar0`, Nginx reverse proxy SSL untuk Mini App, systemd service, firewall, dan cron backup harian tersedia di:
 📖 **[deploy/README-deploy.md](deploy/README-deploy.md)**
+
 
 ---
 

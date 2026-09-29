@@ -1,105 +1,103 @@
 from typing import Optional
 
-# Emoji map keyed by lowercase keyword substring.
-# Ordered from most-specific to most-generic to avoid false positives.
-# Emoji chosen to best resemble the brand color/logo per Simple Icons (simpleicons.org).
 ISSUER_EMOJI_MAP = {
-    # ── Developer / Code Hosting ─────────────────────────────────────────────
-    "github": "🐙",           # Octocat
-    "gitlab": "🦊",           # Fox logo (orange)
-    "bitbucket": "🪣",        # Blue bucket
-    "gitea": "☕",
+    # Developer & Code Hosting
+    "github": "🐙",
+    "gitlab": "🦊",
+    "bitbucket": "🪣",
+    "gitea": "🍵",
     "sourceforge": "🔥",
     "codeberg": "⛰️",
 
-    # ── Google Ecosystem ─────────────────────────────────────────────────────
-    "google": "🔵",           # Blue G
-    "gmail": "✉️",
-    "youtube": "▶️",          # Red play button
+    # Google Ecosystem (Composite keys first)
     "google cloud": "☁️",
-    "firebase": "🔥",         # Orange flame
-    "android": "🤖",          # Green robot
+    "google": "🔵",
+    "gmail": "✉️",
+    "youtube music": "🎵",
+    "youtube": "▶️",
+    "firebase": "🔥",
+    "android": "🤖",
 
-    # ── Microsoft Ecosystem ──────────────────────────────────────────────────
-    "microsoft": "🟦",        # Blue square
+    # Microsoft Ecosystem
+    "microsoft": "🪟",
     "outlook": "📧",
-    "azure": "🔷",            # Blue diamond
+    "azure": "🔷",
     "xbox": "🎮",
     "onedrive": "☁️",
-    "teams": "💼",
+    "teams": "👥",
     "office": "📄",
-    "windows": "🪟",          # Window squares
+    "windows": "🪟",
     "skype": "🔵",
     "bing": "🔍",
 
-    # ── Apple Ecosystem ──────────────────────────────────────────────────────
-    "apple": "🍎",            # Red apple
+    # Apple Ecosystem
+    "apple": "🍎",
     "icloud": "☁️",
     "itunes": "🎵",
 
-    # ── Social Media ─────────────────────────────────────────────────────────
-    "facebook": "🔵",         # Blue
-    "instagram": "📸",        # Camera
-    "whatsapp": "💬",         # Green chat
+    # Social Media
+    "facebook": "🔵",
+    "instagram": "📸",
+    "whatsapp": "💬",
     "messenger": "💬",
-    "twitter": "🐦",          # Bird
+    "twitter": "🐦",
     "x.com": "✖️",
-    " x ": "✖️",              # standalone X (avoid matching "fox", "xbox" etc.)
-    "tiktok": "🎵",           # Music note (black/teal)
-    "snapchat": "👻",         # Ghost
-    "pinterest": "📌",        # Red pin
-    "linkedin": "🔗",         # Chain / professional
-    "reddit": "🤖",           # Robot face (Snoo)
+    " x ": "✖️",
+    "tiktok": "🎵",
+    "snapchat": "👻",
+    "pinterest": "📌",
+    "linkedin": "🔗",
+    "reddit": "🤖",
     "tumblr": "📓",
-    "mastodon": "🐘",         # Elephant
-    "bluesky": "🦋",          # Butterfly
-    "threads": "🧵",          # Thread spool
+    "mastodon": "🐘",
+    "bluesky": "🦋",
+    "threads": "🧵",
     "vk": "🔵",
     "line": "💚",
     "wechat": "💚",
     "weibo": "🔴",
-    "telegram": "✈️",         # Paper plane / blue
-    "signal": "🔒",           # Lock (private)
-    "discord": "👾",          # Clyde / Alien mascot (classic)
-    "twitch": "🟣",           # Purple
-    "youtube music": "🎵",
-    "spotify": "🟢",          # Green circle
-    "soundcloud": "🟠",       # Orange
+    "telegram": "✈️",
+    "signal": "🔒",
+    "discord": "👾",
+    "twitch": "🟣",
+    "spotify": "🟢",
+    "soundcloud": "🟠",
     "deezer": "🎧",
     "pandora": "🎧",
     "lastfm": "🎸",
     "bandcamp": "🎵",
 
-    # ── Cloud & Hosting ──────────────────────────────────────────────────────
+    # Cloud & Hosting (Composite keys first)
+    "amazon web services": "☁️",
     "aws": "☁️",
-    "amazon": "📦",           # Orange arrow box
-    "cloudflare": "🟠",       # Orange
-    "digitalocean": "🌊",     # Blue wave
+    "amazon": "📦",
+    "cloudflare": "🟠",
+    "digitalocean": "🌊",
     "linode": "🟢",
     "akamai": "🔵",
     "vultr": "🔵",
     "hetzner": "🔴",
     "ovh": "🔵",
     "netlify": "🟢",
-    "vercel": "⚫",           # Black triangle
-    "heroku": "🟣",           # Purple
+    "vercel": "⚫",
+    "heroku": "🟣",
     "render": "🟣",
     "railway": "🚂",
     "fly.io": "✈️",
     "supabase": "🟢",
     "planetscale": "⚫",
 
-    # ── Storage & Files ──────────────────────────────────────────────────────
-    "dropbox": "📁",          # Blue box/folder
+    # Storage & Files
+    "dropbox": "📁",
     "box": "📦",
     "mega": "🔴",
     "pcloud": "☁️",
     "backblaze": "🔴",
 
-    # ── Productivity & Notes ─────────────────────────────────────────────────
-    "notion": "📝",           # Blank page
-    "obsidian": "💎",         # Purple gem
-    "evernote": "🐘",         # Green elephant
+    # Productivity & Design
+    "notion": "📝",
+    "obsidian": "💎",
+    "evernote": "🐘",
     "onenote": "📓",
     "confluence": "🔵",
     "jira": "🔵",
@@ -110,24 +108,24 @@ ISSUER_EMOJI_MAP = {
     "todoist": "✅",
     "airtable": "🟡",
     "miro": "🟡",
-    "figma": "🎨",            # Design (colorful logo)
+    "figma": "🎨",
     "canva": "🎨",
-    "adobe": "🔴",            # Red
+    "adobe": "🔴",
     "sketch": "🟡",
 
-    # ── Communication & Collaboration ────────────────────────────────────────
+    # Communication & Collaboration
     "slack": "💬",
     "zoom": "🔵",
     "meet": "🟢",
     "webex": "🔵",
 
-    # ── E-Commerce & Finance ─────────────────────────────────────────────────
-    "paypal": "🔵",           # Blue
-    "stripe": "🟣",           # Indigo/purple
+    # E-Commerce & Finance
+    "paypal": "🔵",
+    "stripe": "🟣",
     "square": "⬛",
-    "shopify": "🟢",          # Green bag
+    "shopify": "🟢",
     "woocommerce": "🟣",
-    "etsy": "🟠",             # Orange
+    "etsy": "🟠",
     "ebay": "🛍️",
     "alibaba": "🟠",
     "aliexpress": "🔴",
@@ -144,28 +142,28 @@ ISSUER_EMOJI_MAP = {
     "qris": "🔲",
     "flip": "🔵",
 
-    # ── Crypto & Web3 ────────────────────────────────────────────────────────
-    "binance": "🟡",          # Yellow/gold
-    "coinbase": "🔵",         # Blue
-    "kraken": "🟣",           # Purple
+    # Crypto & Web3
+    "binance": "🟡",
+    "coinbase": "🔵",
+    "kraken": "🟣",
     "bybit": "🟡",
     "okx": "⬛",
     "kucoin": "🟢",
     "huobi": "🔵",
     "bitfinex": "🟢",
     "crypto.com": "🔵",
-    "metamask": "🦊",         # Fox logo
+    "metamask": "🦊",
     "ledger": "⬛",
     "trezor": "🔒",
     "coinjar": "🪙",
     "indodax": "🔵",
     "tokocrypto": "🟡",
     "crypto": "🪙",
-    "bitcoin": "🟠",          # BTC orange
+    "bitcoin": "🟠",
     "ethereum": "💎",
     "blockchain": "🔗",
 
-    # ── Gaming ───────────────────────────────────────────────────────────────
+    # Gaming (Composite keys first)
     "steam": "🎮",
     "epic games": "🕹️",
     "epic": "🕹️",
@@ -180,12 +178,12 @@ ISSUER_EMOJI_MAP = {
     "valorant": "🔫",
     "roblox": "🧱",
 
-    # ── VPN & Security ───────────────────────────────────────────────────────
+    # VPN & Security (Composite keys first)
     "nordvpn": "🛡️",
     "expressvpn": "🔴",
     "surfshark": "🦈",
-    "proton": "🔵",
     "protonmail": "✉️",
+    "proton": "🔵",
     "bitwarden": "🛡️",
     "1password": "🔑",
     "lastpass": "🔑",
@@ -195,9 +193,9 @@ ISSUER_EMOJI_MAP = {
     "okta": "🔵",
     "auth0": "🔐",
 
-    # ── Dev Tools ────────────────────────────────────────────────────────────
-    "docker": "🐳",           # Whale
-    "kubernetes": "⎈",        # Helm wheel
+    # Developer Tools
+    "docker": "🐳",
+    "kubernetes": "⎈",
     "jenkins": "🤖",
     "circleci": "🔵",
     "travis": "🔵",
@@ -208,6 +206,9 @@ ISSUER_EMOJI_MAP = {
     "npm": "🔴",
     "pypi": "🐍",
     "conda": "🐍",
+    "python": "🐍",
+    "rust": "🦀",
+    "golang": "🐹",
     "terraform": "🟣",
     "ansible": "🔴",
     "vagrant": "🔵",
@@ -216,7 +217,7 @@ ISSUER_EMOJI_MAP = {
     "nexus": "🔵",
     "jetbrains": "🔴",
 
-    # ── Domains & DNS ────────────────────────────────────────────────────────
+    # Domains & DNS
     "namecheap": "🔴",
     "godaddy": "🟢",
     "porkbun": "🐷",
@@ -224,35 +225,34 @@ ISSUER_EMOJI_MAP = {
     "route53": "☁️",
     "dnsmadeeasy": "🟢",
 
-    # ── Email Services ───────────────────────────────────────────────────────
+    # Email Services
     "zoho": "🔵",
-    "protonmail": "🔵",
     "fastmail": "🔵",
     "mailchimp": "🟡",
     "sendgrid": "🔵",
     "mailgun": "🔴",
 
-    # ── Education ────────────────────────────────────────────────────────────
+    # Education
     "coursera": "🔵",
     "udemy": "🟣",
     "duolingo": "🟢",
     "khan": "🟢",
     "edx": "🔴",
 
-    # ── Travel & Transport ───────────────────────────────────────────────────
+    # Travel & Transport
     "airbnb": "🔴",
     "booking": "🔵",
     "tiket": "🔵",
     "traveloka": "🔵",
 
-    # ── Telco & ISP ──────────────────────────────────────────────────────────
+    # Telco & ISP
     "telkomsel": "🔴",
     "indosat": "🟡",
     "xl": "🔵",
     "smartfren": "🔴",
-    "3 ": "🔵",               # Tri / 3 Indonesia
+    " 3 ": "🔵",
 
-    # ── Banking & Finance ────────────────────────────────────────────────────
+    # Indonesian & Global Banking
     "bca": "🔵",
     "mandiri": "🟡",
     "bni": "🟠",
@@ -270,8 +270,8 @@ ISSUER_EMOJI_MAP = {
     "skrill": "🟣",
     "neteller": "🟢",
 
-    # ── Media & Streaming ────────────────────────────────────────────────────
-    "netflix": "🔴",          # Red N
+    # Streaming & Media
+    "netflix": "🔴",
     "disney": "🔵",
     "hbo": "🟣",
     "prime video": "🔵",
@@ -282,9 +282,16 @@ ISSUER_EMOJI_MAP = {
     "viu": "🟡",
     "iflix": "🔴",
 
-    # ── Misc / Generic fallbacks ─────────────────────────────────────────────
+    # Artificial Intelligence & Search
+    "openai": "🤖",
+    "chatgpt": "🤖",
+    "anthropic": "🟠",
+    "claude": "🟠",
+    "huggingface": "🤗",
+    "midjourney": "⛵",
+
+    # Generic & Fallbacks
     "yahoo": "🟣",
-    "linkedin": "🔵",
     "wordpress": "🔵",
     "wix": "⬛",
     "squarespace": "⬛",
@@ -294,35 +301,13 @@ ISSUER_EMOJI_MAP = {
     "twilio": "🔴",
     "zapier": "🟠",
     "ifttt": "⬛",
-    "openai": "⬛",
-    "anthropic": "🟠",
-    "huggingface": "🤗",
-
-    # ── Email / generic ──────────────────────────────────────────────────────
     "mail": "✉️",
     "email": "✉️",
 }
 
 
-def get_issuer_emoji(issuer: Optional[str]) -> str:
-    """
-    Return an emoji that best represents the given issuer brand.
-    Matches by substring (case-insensitive). Falls back to 🔐.
-    """
-    if not issuer or not isinstance(issuer, str):
-        return "🔐"
-    normalized = issuer.strip().lower()
-    for key, emoji in ISSUER_EMOJI_MAP.items():
-        if key.strip() in normalized:
-            return emoji
-    return "🔐"
-
-
-# ── Simple Icons (simpleicons.org) Slug & Brand Mapping ───────────────────────
-# Maps issuer substrings to official Simple Icons SVG slugs.
-# CDN URL format: https://cdn.simpleicons.org/{slug}/{color}
 ISSUER_SLUG_MAP = {
-    # Developer / Code Hosting
+    # Developer & Code Hosting
     "github": "github",
     "gitlab": "gitlab",
     "bitbucket": "bitbucket",
@@ -334,6 +319,7 @@ ISSUER_SLUG_MAP = {
     "google cloud": "googlecloud",
     "google": "google",
     "gmail": "gmail",
+    "youtube music": "youtubemusic",
     "youtube": "youtube",
     "firebase": "firebase",
     "android": "android",
@@ -393,8 +379,16 @@ ISSUER_SLUG_MAP = {
     "vultr": "vultr",
     "hetzner": "hetzner",
     "ovh": "ovh",
+    "netlify": "netlify",
+    "vercel": "vercel",
+    "heroku": "heroku",
+    "render": "render",
+    "railway": "railway",
+    "supabase": "supabase",
 
-    # Productivity & Notes
+    # Storage & Productivity
+    "dropbox": "dropbox",
+    "box": "box",
     "notion": "notion",
     "obsidian": "obsidian",
     "evernote": "evernote",
@@ -466,6 +460,7 @@ ISSUER_SLUG_MAP = {
     "nordvpn": "nordvpn",
     "expressvpn": "expressvpn",
     "surfshark": "surfshark",
+    "protonmail": "proton",
     "proton": "proton",
     "bitwarden": "bitwarden",
     "1password": "1password",
@@ -476,7 +471,7 @@ ISSUER_SLUG_MAP = {
     "okta": "okta",
     "auth0": "auth0",
 
-    # DevOps & Tools
+    # DevOps & Languages
     "docker": "docker",
     "kubernetes": "kubernetes",
     "jenkins": "jenkins",
@@ -488,6 +483,8 @@ ISSUER_SLUG_MAP = {
     "postman": "postman",
     "npm": "npm",
     "pypi": "pypi",
+    "python": "python",
+    "rust": "rust",
     "terraform": "terraform",
     "ansible": "ansible",
     "vagrant": "vagrant",
@@ -501,9 +498,55 @@ ISSUER_SLUG_MAP = {
     "hbo": "hbo",
     "hulu": "hulu",
     "openai": "openai",
+    "chatgpt": "openai",
     "anthropic": "anthropic",
+    "claude": "anthropic",
     "huggingface": "huggingface",
 }
+
+
+def _match_issuer_key(issuer_normalized: str, key: str) -> bool:
+    """
+    Check if a normalized issuer string matches a dictionary key.
+    - Keys with spaces (e.g. ' x ', ' 3 ') match space-delimited boundary.
+    - Short keys (<= 2 chars, e.g. 'ea', '3', 'vk', 'xl') require full word/token match.
+    - Multi-character keys (>= 3 chars) match as substrings.
+    """
+    if not key or not issuer_normalized:
+        return False
+
+    clean_key = key.strip()
+    if issuer_normalized == clean_key:
+        return True
+
+    if key.startswith(" ") or key.endswith(" "):
+        return key in f" {issuer_normalized} "
+
+    if len(clean_key) <= 2:
+        words = (
+            issuer_normalized.replace(".", " ")
+            .replace("-", " ")
+            .replace("_", " ")
+            .replace("/", " ")
+            .split()
+        )
+        return clean_key in words
+
+    return clean_key in issuer_normalized
+
+
+def get_issuer_emoji(issuer: Optional[str]) -> str:
+    """
+    Return the emoji that best represents the given issuer brand.
+    Falls back to 🔐.
+    """
+    if not issuer or not isinstance(issuer, str):
+        return "🔐"
+    normalized = issuer.strip().lower()
+    for key, emoji in ISSUER_EMOJI_MAP.items():
+        if _match_issuer_key(normalized, key):
+            return emoji
+    return "🔐"
 
 
 def get_issuer_slug(issuer: Optional[str]) -> Optional[str]:
@@ -515,7 +558,7 @@ def get_issuer_slug(issuer: Optional[str]) -> Optional[str]:
         return None
     normalized = issuer.strip().lower()
     for key, slug in ISSUER_SLUG_MAP.items():
-        if key in normalized:
+        if _match_issuer_key(normalized, key):
             return slug
     return None
 
@@ -523,7 +566,6 @@ def get_issuer_slug(issuer: Optional[str]) -> Optional[str]:
 def get_issuer_icon_url(issuer: Optional[str], color: Optional[str] = None) -> Optional[str]:
     """
     Return the CDN URL for the issuer's lightweight SVG from simpleicons.org.
-    If color is specified (e.g. 'white' or hex '1877F2'), the SVG will be rendered in that color.
     Example: https://cdn.simpleicons.org/github
     """
     slug = get_issuer_slug(issuer)
@@ -536,8 +578,7 @@ def get_issuer_icon_url(issuer: Optional[str], color: Optional[str] = None) -> O
 
 def get_issuer_info(issuer: Optional[str]) -> dict:
     """
-    Return a unified metadata dictionary containing the best-match emoji,
-    Simple Icons slug, and SVG CDN URL. Perfect for API and Telegram Mini App consumption.
+    Return metadata dictionary with emoji, slug, and SVG CDN URL.
     """
     emoji = get_issuer_emoji(issuer)
     slug = get_issuer_slug(issuer)
@@ -547,4 +588,3 @@ def get_issuer_info(issuer: Optional[str]) -> dict:
         "slug": slug,
         "icon_url": f"https://cdn.simpleicons.org/{slug}" if slug else None,
     }
-

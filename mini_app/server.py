@@ -1,13 +1,9 @@
-import asyncio
-import html
-import json
 import logging
-import os
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 from aiohttp import web
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from config import get_settings
@@ -15,7 +11,7 @@ from crypto.cipher import decrypt_secret, encrypt_secret
 from crypto.kdf import derive_encryption_key, verify_pin
 from db.models import Account, User
 from mini_app.crypto_utils import MiniAppSessionManager, validate_telegram_init_data
-from services.icon_service import get_issuer_emoji, get_issuer_info, get_issuer_slug
+from services.icon_service import get_issuer_info
 from services.lockout_service import (
     check_lockout,
     record_failed_pin_attempt,
@@ -181,12 +177,10 @@ class MiniAppHandler:
                     "error": "PIN salah. Silakan coba lagi.",
                 }, status=401)
 
-            # PIN correct
             await record_successful_pin_attempt(session, user)
             derived_key = derive_encryption_key(pin, user.kdf_salt)
             await log_action(session, user.id, "miniapp_login", success=True)
 
-            # Create session
             token = self.session_manager.create_session(user.id, derived_key, ttl_seconds=300)
 
             return json_response({
@@ -222,7 +216,6 @@ class MiniAppHandler:
                 except Exception:
                     decrypted_secret = ""
 
-                # Generate live OTP code
                 if acc.type == "hotp":
                     code = generate_hotp_code(decrypted_secret, acc.hotp_counter, acc.digits)
                     rem_sec = 0
@@ -243,9 +236,7 @@ class MiniAppHandler:
                     "is_favorite": acc.is_favorite,
                     "code": code,
                     "remaining_seconds": rem_sec,
-                    # Secret is included to allow zero-latency client-side ticker
                     "secret": decrypted_secret,
-                    # Rich Simple Icons metadata
                     "emoji": issuer_meta["emoji"],
                     "slug": issuer_meta["slug"],
                     "icon_url": issuer_meta["icon_url"],
@@ -292,7 +283,6 @@ class MiniAppHandler:
         if not cleaned_secret:
             return json_response({"error": "Secret Key tidak valid (harus karakter Base32 valid)"}, status=400)
 
-        # Verify key works
         try:
             generate_totp_code(cleaned_secret, digits, period)
         except Exception:
