@@ -82,6 +82,9 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if context.user_data.get("add_state") != "awaiting_qr":
         return
 
+    if not update.message:
+        return
+
     photo_file = None
     if update.message.photo:
         highest_res_photo = update.message.photo[-1]

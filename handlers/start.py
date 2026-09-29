@@ -224,7 +224,7 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
                 parse_mode=ParseMode.MARKDOWN,
             )
 
-            if context.job_queue and update.effective_chat:
+            if context.job_queue and update.effective_chat and query.message:
                 job_name = f"auto_delete_phrase_{update.effective_chat.id}_{query.message.message_id}"
                 context.job_queue.run_once(
                     auto_delete_message_job,
