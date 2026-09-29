@@ -335,19 +335,49 @@ async def handle_select_account_for_code(
             cancel_view_code_jobs(context, update.effective_chat.id, query.message.message_id)
             context.user_data.pop("active_view", None)
 
-    context.user_data["view_account_id"] = account_id
-    clear_keypad_buffer(context.user_data, "view_pin")
-
     session_factory = context.bot_data.get("session_factory")
     user_id = update.effective_user.id
 
     account_label = "Akun"
     if session_factory:
         async with session_factory() as session:
-            stmt = select(Account).where(Account.id == account_id)
+            user_stmt = select(User).where(User.telegram_user_id == user_id)
+            user = (await session.execute(user_stmt)).scalars().first()
+            if not user:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                if query:
+                    await query.edit_message_text("❌ User tidak terdaftar.", reply_markup=kb)
+                return
+
+            is_locked, remaining_seconds = check_lockout(user)
+            if is_locked:
+                mins, secs = divmod(remaining_seconds, 60)
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                if query:
+                    await query.edit_message_text(
+                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                        reply_markup=kb,
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                return
+
+            stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
             acc = (await session.execute(stmt)).scalars().first()
-            if acc:
-                account_label = acc.label
+            if not acc:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Daftar Akun", callback_data="menu:view_code")]
+                ])
+                if query:
+                    await query.edit_message_text("❌ Akun tidak ditemukan.", reply_markup=kb)
+                return
+            account_label = acc.label
+
+    context.user_data["view_account_id"] = account_id
+    clear_keypad_buffer(context.user_data, "view_pin")
 
     pin_len = get_pin_length(context)
     text = (
@@ -392,7 +422,11 @@ async def handle_view_code_pin_keypad(
         user_id = update.effective_user.id
 
         if not session_factory:
-            await query.edit_message_text("❌ Database tidak tersedia.")
+            clear_keypad_buffer(context.user_data, "view_pin")
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+            ])
+            await query.edit_message_text("❌ Database tidak tersedia.", reply_markup=kb)
             return
 
         async with session_factory() as session:

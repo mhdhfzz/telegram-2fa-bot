@@ -5,12 +5,12 @@ from crypto.kdf import derive_encryption_key, generate_salt
 
 
 def export_accounts_backup(accounts_data: List[Dict[str, Any]], export_passphrase: str) -> bytes:
-    if not export_passphrase or len(export_passphrase) < 4:
+    if not export_passphrase or not isinstance(export_passphrase, str) or len(export_passphrase.strip()) < 4:
         raise ValueError("Passphrase must be at least 4 characters")
 
     raw_json = json.dumps(accounts_data, ensure_ascii=False)
     salt = generate_salt()
-    key = derive_encryption_key(export_passphrase, salt)
+    key = derive_encryption_key(export_passphrase.strip(), salt)
     ciphertext, nonce = encrypt_secret(key, raw_json)
 
     envelope = {
@@ -24,6 +24,11 @@ def export_accounts_backup(accounts_data: List[Dict[str, Any]], export_passphras
 
 
 def import_accounts_backup(backup_bytes: bytes, export_passphrase: str) -> List[Dict[str, Any]]:
+    if not backup_bytes or not isinstance(backup_bytes, (bytes, bytearray)):
+        raise ValueError("Invalid passphrase or corrupted backup")
+    if not export_passphrase or not isinstance(export_passphrase, str) or not export_passphrase.strip():
+        raise ValueError("Invalid passphrase or corrupted backup")
+
     try:
         envelope = json.loads(backup_bytes.decode("utf-8"))
         salt = envelope["salt"]
@@ -33,7 +38,7 @@ def import_accounts_backup(backup_bytes: bytes, export_passphrase: str) -> List[
         raise ValueError("Invalid passphrase or corrupted backup") from exc
 
     try:
-        key = derive_encryption_key(export_passphrase, salt)
+        key = derive_encryption_key(export_passphrase.strip(), salt)
         decrypted_json = decrypt_secret(key, ciphertext, nonce)
         accounts_data = json.loads(decrypted_json)
         if not isinstance(accounts_data, list):

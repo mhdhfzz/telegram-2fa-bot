@@ -133,6 +133,44 @@ async def test_delete_account_with_pin(session_factory, seed_user_and_accounts):
 
 
 @pytest.mark.asyncio
+async def test_delete_account_not_found_or_unregistered(session_factory, seed_user_and_accounts):
+    from handlers.manage_account import handle_delete_prompt
+
+    # Test 1: Account does not exist in prompt
+    update = MagicMock()
+    update.effective_user.id = 101
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    await handle_delete_prompt(update, context, account_id=9999)
+    query.edit_message_text.assert_called_with(
+        "❌ Akun tidak ditemukan atau sudah dihapus.",
+        reply_markup=pytest.approx(query.edit_message_text.call_args[1]["reply_markup"]),
+    )
+
+    # Test 2: Unregistered user in keypad
+    update.effective_user.id = 9999
+    context.user_data = {"del_acc_id": 1}
+    for digit in "123456":
+        query.data = f"del_pin:key:{digit}"
+        await handle_delete_account_pin_keypad(update, context)
+    assert "❌ Pengguna tidak terdaftar." in query.edit_message_text.call_args[0][0]
+
+    # Test 3: Account deleted concurrently before PIN completion
+    update.effective_user.id = 101
+    context.user_data = {"del_acc_id": 9999}
+    for digit in "123456":
+        query.data = f"del_pin:key:{digit}"
+        await handle_delete_account_pin_keypad(update, context)
+    assert "❌ Akun tidak ditemukan atau sudah dihapus." in query.edit_message_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
 async def test_edit_account_label(session_factory, seed_user_and_accounts):
     from handlers.manage_account import handle_edit_label_prompt, handle_save_new_label
 

@@ -121,7 +121,10 @@ async def handle_view_all_codes_start(
 
     if not session_factory:
         if query:
-            await query.edit_message_text("❌ Database tidak tersedia.")
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+            ])
+            await query.edit_message_text("❌ Database tidak tersedia.", reply_markup=kb)
         return
 
     async with session_factory() as session:
@@ -129,7 +132,10 @@ async def handle_view_all_codes_start(
         user = (await session.execute(user_stmt)).scalars().first()
         if not user:
             if query:
-                await query.edit_message_text("❌ User tidak terdaftar.")
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ User tidak terdaftar.", reply_markup=kb)
             return
 
         is_locked, remaining_seconds = check_lockout(user)
@@ -204,7 +210,11 @@ async def handle_view_all_pin_keypad(
         user_id = update.effective_user.id
 
         if not session_factory:
-            await query.edit_message_text("❌ Database tidak tersedia.")
+            clear_keypad_buffer(context.user_data, "view_all_pin")
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+            ])
+            await query.edit_message_text("❌ Database tidak tersedia.", reply_markup=kb)
             return
 
         async with session_factory() as session:
@@ -259,8 +269,11 @@ async def handle_view_all_pin_keypad(
             )
             accounts = list((await session.execute(acc_stmt)).scalars().all())
             if not accounts:
-                await query.edit_message_text("❌ Tidak ada akun tersimpan.")
                 clear_keypad_buffer(context.user_data, "view_all_pin")
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ Tidak ada akun tersimpan.", reply_markup=kb)
                 return
 
             key = derive_encryption_key(buf, user.kdf_salt)

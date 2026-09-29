@@ -518,3 +518,29 @@ async def test_view_all_page_clamping(session_factory, seed_user_and_accounts):
     assert "Halaman 1/2" in query.edit_message_text.call_args[0][0]
 
 
+@pytest.mark.asyncio
+async def test_view_all_unregistered_or_missing_db(session_factory):
+    update = MagicMock()
+    update.effective_user.id = 9999
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    # Case 1: Unregistered user start
+    await handle_view_all_codes_start(update, context)
+    assert "❌ User tidak terdaftar." in query.edit_message_text.call_args[0][0]
+    assert query.edit_message_text.call_args[1]["reply_markup"] is not None
+
+    # Case 2: Missing session_factory
+    context.bot_data = {}
+    await handle_view_all_codes_start(update, context)
+    assert "❌ Database tidak tersedia." in query.edit_message_text.call_args[0][0]
+    assert query.edit_message_text.call_args[1]["reply_markup"] is not None
+
+
+

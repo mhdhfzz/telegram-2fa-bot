@@ -367,5 +367,26 @@ async def test_handle_refresh_code_hotp_account_not_found(session_factory, seed_
     query.edit_message_text.assert_called_once_with("❌ Akun tidak ditemukan.")
 
 
+@pytest.mark.asyncio
+async def test_select_account_multi_tenant_and_unregistered(session_factory, seed_user_and_totp_account):
+    user, acc = seed_user_and_totp_account
 
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update = MagicMock()
+    update.callback_query = query
 
+    context = MagicMock()
+    context.bot_data = {"session_factory": session_factory}
+    context.user_data = {}
+
+    # Case 1: Unregistered user
+    update.effective_user.id = 9999
+    await handle_select_account_for_code(update, context, acc.id)
+    assert "❌ User tidak terdaftar." in query.edit_message_text.call_args[0][0]
+
+    # Case 2: User tries to select someone else's account
+    update.effective_user.id = user.telegram_user_id
+    await handle_select_account_for_code(update, context, 9999)
+    assert "❌ Akun tidak ditemukan." in query.edit_message_text.call_args[0][0]

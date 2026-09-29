@@ -63,3 +63,34 @@ def test_import_invalid_payload_structure():
     with pytest.raises(ValueError, match="Invalid passphrase or corrupted backup"):
         import_accounts_backup(backup_bytes, "valid_passphrase")
 
+
+def test_backup_whitespace_or_invalid_types():
+    accounts_data = [{"label": "Test", "secret": "ABCDEF123456", "type": "totp"}]
+
+    # Whitespace only passphrase
+    with pytest.raises(ValueError, match="Passphrase must be at least 4 characters"):
+        export_accounts_backup(accounts_data, "   ")
+
+    # Non-string passphrase
+    with pytest.raises(ValueError, match="Passphrase must be at least 4 characters"):
+        export_accounts_backup(accounts_data, 12345)  # type: ignore
+
+    # None or empty bytes in import
+    with pytest.raises(ValueError, match="Invalid passphrase or corrupted backup"):
+        import_accounts_backup(None, "valid_passphrase")  # type: ignore
+
+    with pytest.raises(ValueError, match="Invalid passphrase or corrupted backup"):
+        import_accounts_backup(b"", "valid_passphrase")
+
+    with pytest.raises(ValueError, match="Invalid passphrase or corrupted backup"):
+        import_accounts_backup(b"{}", "   ")
+
+    # Symmetric passphrase with whitespace
+    backup_data = export_accounts_backup(accounts_data, "  my_secret_pass  ")
+    restored = import_accounts_backup(backup_data, "my_secret_pass")
+    assert restored[0]["secret"] == "ABCDEF123456"
+
+    restored2 = import_accounts_backup(backup_data, "  my_secret_pass  ")
+    assert restored2[0]["secret"] == "ABCDEF123456"
+
+

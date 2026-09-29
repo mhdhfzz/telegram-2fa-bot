@@ -274,18 +274,33 @@ async def handle_delete_prompt(
         async with session_factory() as session:
             stmt = select(User).where(User.telegram_user_id == user_id)
             user = (await session.execute(stmt)).scalars().first()
-            if user:
-                is_locked, remaining_seconds = check_lockout(user)
-                if is_locked:
-                    mins, secs = divmod(remaining_seconds, 60)
-                    await query.edit_message_text(
-                        f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
-                        ]),
-                        parse_mode=ParseMode.MARKDOWN,
-                    )
-                    return
+            if not user:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
+                return
+
+            is_locked, remaining_seconds = check_lockout(user)
+            if is_locked:
+                mins, secs = divmod(remaining_seconds, 60)
+                await query.edit_message_text(
+                    f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
+                    ]),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+
+            acc_stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
+            account = (await session.execute(acc_stmt)).scalars().first()
+            if not account:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
+                ])
+                await query.edit_message_text("❌ Akun tidak ditemukan atau sudah dihapus.", reply_markup=kb)
+                return
 
     context.user_data["del_acc_id"] = account_id
     clear_keypad_buffer(context.user_data, "del_pin")
@@ -337,52 +352,73 @@ async def handle_delete_account_pin_keypad(
         session_factory = context.bot_data.get("session_factory")
         user_id = update.effective_user.id
 
-        if session_factory:
-            async with session_factory() as session:
-                user_stmt = select(User).where(User.telegram_user_id == user_id)
-                user = (await session.execute(user_stmt)).scalars().first()
-                if user:
-                    is_locked, remaining_seconds = check_lockout(user)
-                    if is_locked:
-                        mins, secs = divmod(remaining_seconds, 60)
-                        clear_keypad_buffer(context.user_data, "del_pin")
-                        context.user_data.pop("del_acc_id", None)
-                        await query.edit_message_text(
-                            f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
-                            reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
-                            ]),
-                            parse_mode=ParseMode.MARKDOWN,
-                        )
-                        return
+        if not session_factory:
+            clear_keypad_buffer(context.user_data, "del_pin")
+            context.user_data.pop("del_acc_id", None)
+            await query.edit_message_text("❌ Database tidak tersedia.")
+            return
 
-                    if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
-                        locked_now, rem = await record_failed_pin_attempt(session, user)
-                        await log_action(session, user.id, "delete_account", False, account_id=account_id)
-                        clear_keypad_buffer(context.user_data, "del_pin")
-                        context.user_data.pop("del_acc_id", None)
+        async with session_factory() as session:
+            user_stmt = select(User).where(User.telegram_user_id == user_id)
+            user = (await session.execute(user_stmt)).scalars().first()
+            if not user:
+                clear_keypad_buffer(context.user_data, "del_pin")
+                context.user_data.pop("del_acc_id", None)
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")]
+                ])
+                await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
+                return
 
-                        if locked_now:
-                            mins, secs = divmod(rem, 60)
-                            fail_text = f"🔒 **Akun Terkunci!** Terlalu banyak percobaan PIN salah. Coba lagi dalam {mins}m {secs}s."
-                        else:
-                            attempts_left = max(0, 5 - user.failed_pin_attempts)
-                            fail_text = f"❌ **PIN Salah!** Sisa percobaan sebelum terkunci: {attempts_left} kali."
+            is_locked, remaining_seconds = check_lockout(user)
+            if is_locked:
+                mins, secs = divmod(remaining_seconds, 60)
+                clear_keypad_buffer(context.user_data, "del_pin")
+                context.user_data.pop("del_acc_id", None)
+                await query.edit_message_text(
+                    f"🔒 **Akun Terkunci!** Coba lagi dalam {mins}m {secs}s.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
+                    ]),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
 
-                        fail_kb = InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
-                        ])
-                        await query.edit_message_text(fail_text, reply_markup=fail_kb, parse_mode=ParseMode.MARKDOWN)
-                        return
+            if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+                locked_now, rem = await record_failed_pin_attempt(session, user)
+                await log_action(session, user.id, "delete_account", False, account_id=account_id)
+                clear_keypad_buffer(context.user_data, "del_pin")
+                context.user_data.pop("del_acc_id", None)
 
-                    # Correct PIN
-                    await record_successful_pin_attempt(session, user)
-                    acc_stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
-                    account = (await session.execute(acc_stmt)).scalars().first()
-                    if account:
-                        await session.delete(account)
-                        await session.commit()
-                        await log_action(session, user.id, "delete_account", True, account_id=None)
+                if locked_now:
+                    mins, secs = divmod(rem, 60)
+                    fail_text = f"🔒 **Akun Terkunci!** Terlalu banyak percobaan PIN salah. Coba lagi dalam {mins}m {secs}s."
+                else:
+                    attempts_left = max(0, 5 - user.failed_pin_attempts)
+                    fail_text = f"❌ **PIN Salah!** Sisa percobaan sebelum terkunci: {attempts_left} kali."
+
+                fail_kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
+                ])
+                await query.edit_message_text(fail_text, reply_markup=fail_kb, parse_mode=ParseMode.MARKDOWN)
+                return
+
+            # Correct PIN: verify account exists before deleting
+            await record_successful_pin_attempt(session, user)
+            acc_stmt = select(Account).where(Account.id == account_id, Account.user_id == user.id)
+            account = (await session.execute(acc_stmt)).scalars().first()
+            if not account:
+                clear_keypad_buffer(context.user_data, "del_pin")
+                context.user_data.pop("del_acc_id", None)
+                not_found_kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Kembali ke Daftar", callback_data="manage:list")]
+                ])
+                await query.edit_message_text("❌ Akun tidak ditemukan atau sudah dihapus.", reply_markup=not_found_kb)
+                return
+
+            await session.delete(account)
+            await session.commit()
+            await log_action(session, user.id, "delete_account", True, account_id=None)
 
         clear_keypad_buffer(context.user_data, "del_pin")
         context.user_data.pop("del_acc_id", None)
