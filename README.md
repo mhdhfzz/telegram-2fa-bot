@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram_Bot_API-v20+-2CA5E0.svg?logo=telegram&logoColor=white)](https://python-telegram-bot.org/)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM%20%7C%20Argon2id-green.svg)](https://cryptography.io/)
-[![Tests](https://img.shields.io/badge/Tests-90%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
+[![Tests](https://img.shields.io/badge/Tests-91%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
 [![Demo Bot](https://img.shields.io/badge/Demo_Bot-@VexAuthKey__bot-26A5E4.svg?logo=telegram&logoColor=white)](https://t.me/VexAuthKey_bot)
 
 Bot Telegram yang berfungsi sebagai aplikasi *two-factor authenticator* mandiri (seperti Google Authenticator / Authy), dihosting di VPS menggunakan Python. Bot mendukung multi-tenant dengan data antar-pengguna terisolasi penuh dan dienkripsi kuat menggunakan PIN pribadi masing-masing user.
@@ -154,13 +154,13 @@ tests/test_keypad.py ......                                [ 33%]
 tests/test_lockout.py ..                                   [ 35%]
 tests/test_lockout_handlers.py .....                       [ 41%]
 tests/test_menu_handlers.py ..........                     [ 52%]
-tests/test_otp.py .........                                [ 62%]
-tests/test_settings.py ......                              [ 68%]
-tests/test_start_handler.py .....                          [ 74%]
-tests/test_view_all_codes.py ..............                [ 87%]
+tests/test_otp.py ..........                               [ 63%]
+tests/test_settings.py ......                              [ 69%]
+tests/test_start_handler.py .....                          [ 75%]
+tests/test_view_all_codes.py ..............                [ 88%]
 tests/test_view_code.py .........                          [100%]
 
-============================= 90 passed in 24.31s =============================
+============================= 91 passed in 24.23s =============================
 ```
 
 ---

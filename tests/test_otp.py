@@ -95,3 +95,33 @@ def test_parse_otpauth_uri_invalid_secret():
     with pytest.raises(ValueError, match="Secret key tidak valid"):
         parse_otpauth_uri(uri_invalid_b32)
 
+
+def test_otp_service_defensive_parameters():
+    # Test zero and negative intervals in TOTP code generation
+    code = generate_totp_code("JBSWY3DPEHPK3PXP", digits=6, interval=0)
+    assert len(code) == 6
+    assert code.isdigit()
+
+    code_neg = generate_totp_code("JBSWY3DPEHPK3PXP", digits=99, interval=-10)
+    assert len(code_neg) == 6
+    assert code_neg.isdigit()
+
+    # Test remaining seconds with invalid intervals
+    rem = get_totp_remaining_seconds(interval=0)
+    assert 1 <= rem <= 30
+
+    rem_neg = get_totp_remaining_seconds(interval=-5)
+    assert 1 <= rem_neg <= 30
+
+    # Test HOTP negative counter and invalid digits
+    hotp_code = generate_hotp_code("JBSWY3DPEHPK3PXP", counter=-1, digits=10)
+    assert len(hotp_code) == 6
+    assert hotp_code.isdigit()
+
+    # Test countdown bar with zero/negative total_period
+    bar_zero = render_countdown_bar(15, total_period=0)
+    assert "15 detik lagi" in bar_zero
+
+    bar_neg = render_countdown_bar(10, total_period=-10)
+    assert "10 detik lagi" in bar_neg
+

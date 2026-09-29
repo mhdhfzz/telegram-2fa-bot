@@ -11,6 +11,10 @@ def clean_base32_secret(secret: str) -> str:
 
 def generate_totp_code(secret: str, digits: int = 6, interval: int = 30) -> str:
     """Generate current TOTP code without spaces."""
+    if not isinstance(interval, int) or interval <= 0:
+        interval = 30
+    if digits not in (6, 8):
+        digits = 6
     cleaned = clean_base32_secret(secret)
     totp = pyotp.TOTP(cleaned, digits=digits, interval=interval)
     return str(totp.now())
@@ -18,12 +22,18 @@ def generate_totp_code(secret: str, digits: int = 6, interval: int = 30) -> str:
 
 def get_totp_remaining_seconds(interval: int = 30) -> int:
     """Get remaining seconds in the current TOTP interval."""
+    if not isinstance(interval, int) or interval <= 0:
+        interval = 30
     current_timestamp = time.time()
     return int(interval - (current_timestamp % interval))
 
 
 def generate_hotp_code(secret: str, counter: int, digits: int = 6) -> str:
     """Generate HOTP code at counter without spaces."""
+    if digits not in (6, 8):
+        digits = 6
+    if not isinstance(counter, int) or counter < 0:
+        counter = 0
     cleaned = clean_base32_secret(secret)
     hotp = pyotp.HOTP(cleaned, digits=digits)
     return str(hotp.at(counter))
@@ -39,6 +49,8 @@ def render_countdown_bar(remaining_seconds: int, total_period: int = 30) -> str:
     Render visual progress bar for countdown.
     Example: ⏳ [■■■■■■□□□□] 18 detik lagi
     """
+    if not isinstance(total_period, int) or total_period <= 0:
+        total_period = 30
     total_blocks = 10
     remaining_seconds = max(0, min(remaining_seconds, total_period))
     filled_blocks = int(math.ceil((remaining_seconds / total_period) * total_blocks))
