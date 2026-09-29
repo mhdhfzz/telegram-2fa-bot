@@ -253,14 +253,30 @@
 
         <!-- Tab: Backup -->
         <div id="tabBackup" class="settings-tab-pane">
-          <p class="settings-info-text">Ekspor seluruh data akun dan rahasia 2FA Anda ke dalam format JSON terstruktur untuk pencadangan aman.</p>
+          <p class="settings-info-text">Ekspor atau pulihkan data akun dan rahasia 2FA Anda ke dalam format JSON terstruktur untuk pencadangan aman.</p>
           <div class="backup-actions-box">
-            <button type="button" id="btnExportBackup" class="btn-primary full-width">📥 Ekspor Cadangan (JSON)</button>
+            <button type="button" id="btnExportBackup" class="btn-primary full-width">📤 Ekspor Cadangan (JSON)</button>
           </div>
           <div id="backupOutputArea" class="hidden">
             <label class="backup-label">Data Cadangan Anda:</label>
-            <textarea id="backupJsonText" readonly rows="6" class="backup-textarea"></textarea>
+            <textarea id="backupJsonText" readonly rows="5" class="backup-textarea"></textarea>
             <button type="button" id="btnCopyBackupJson" class="btn-secondary full-width">📋 Salin Data Cadangan</button>
+          </div>
+
+          <hr class="settings-divider" style="margin: 20px 0; border: none; border-top: 1px solid var(--border-color);">
+
+          <div class="import-backup-section">
+            <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">📥 Impor Cadangan Akun</h3>
+            <p class="settings-info-text" style="margin-bottom: 10px;">Tempelkan teks JSON cadangan (dari bot atau Mini App) di bawah ini:</p>
+            <div class="form-group">
+              <textarea id="inputImportJson" rows="4" class="backup-textarea" placeholder='Tempelkan JSON cadangan di sini... {"accounts": [...]}'></textarea>
+            </div>
+            <div class="form-group">
+              <label for="inputImportPassphrase" style="font-size: 12px;">Passphrase (Jika file terenkripsi dari bot)</label>
+              <input type="password" id="inputImportPassphrase" placeholder="Passphrase cadangan (opsional)" autocomplete="off">
+            </div>
+            <div id="importBackupMsg" class="form-error-msg hidden"></div>
+            <button type="button" id="btnSubmitImportBackup" class="btn-primary full-width">📥 Pulihkan & Simpan Akun</button>
           </div>
         </div>
 

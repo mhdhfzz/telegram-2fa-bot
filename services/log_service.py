@@ -1,8 +1,21 @@
+from datetime import datetime, timezone
 import math
 from typing import List, Optional, Tuple
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.models import AccessLog
+
+
+def format_local_timestamp(dt: Optional[datetime], fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """Convert UTC or naive datetime to local system/VPS timezone and format as string."""
+    if not dt:
+        return ""
+    if dt.tzinfo is not None:
+        local_dt = dt.astimezone()
+    else:
+        local_dt = dt.replace(tzinfo=timezone.utc).astimezone()
+    return local_dt.strftime(fmt)
+
 
 
 async def log_action(

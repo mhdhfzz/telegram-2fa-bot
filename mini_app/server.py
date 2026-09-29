@@ -18,7 +18,7 @@ from services.lockout_service import (
     record_failed_pin_attempt,
     record_successful_pin_attempt,
 )
-from services.log_service import log_action
+from services.log_service import format_local_timestamp, log_action
 from services.otp_service import (
     clean_base32_secret,
     generate_hotp_code,
@@ -151,6 +151,11 @@ class MiniAppHandler:
             return json_response({
                 "success": False,
                 "error": f"PIN harus terdiri dari {settings.pin_length} digit.",
+            }, status=400)
+        if not pin.isdigit():
+            return json_response({
+                "success": False,
+                "error": "PIN harus berupa angka.",
             }, status=400)
 
         user_info = validate_telegram_init_data(init_data, self.bot_token)
@@ -320,6 +325,13 @@ class MiniAppHandler:
             await log_action(session, user_id, "miniapp_add_account", success=True, account_id=new_acc.id)
 
             issuer_meta = get_issuer_info(new_acc.issuer)
+            if new_acc.type == "hotp":
+                acc_code = generate_hotp_code(cleaned_secret, 0, digits)
+                rem_sec = 0
+            else:
+                acc_code = generate_totp_code(cleaned_secret, digits, period)
+                rem_sec = get_totp_remaining_seconds(period)
+
             return json_response({
                 "success": True,
                 "account": {
@@ -329,9 +341,10 @@ class MiniAppHandler:
                     "type": new_acc.type,
                     "digits": new_acc.digits,
                     "period": new_acc.period,
+                    "hotp_counter": new_acc.hotp_counter,
                     "is_favorite": new_acc.is_favorite,
-                    "code": generate_totp_code(cleaned_secret, digits, period),
-                    "remaining_seconds": get_totp_remaining_seconds(period),
+                    "code": acc_code,
+                    "remaining_seconds": rem_sec,
                     "secret": cleaned_secret,
                     "emoji": issuer_meta["emoji"],
                     "slug": issuer_meta["slug"],
@@ -345,7 +358,10 @@ class MiniAppHandler:
         if not client_session:
             return json_response({"error": "Unauthorized"}, status=401)
 
-        acc_id = int(request.match_info["id"])
+        try:
+            acc_id = int(request.match_info["id"])
+        except (ValueError, KeyError):
+            return json_response({"error": "Invalid account ID"}, status=400)
         user_id = client_session["user_id"]
 
         async with self.session_factory() as session:
@@ -364,7 +380,10 @@ class MiniAppHandler:
         if not client_session:
             return json_response({"error": "Unauthorized"}, status=401)
 
-        acc_id = int(request.match_info["id"])
+        try:
+            acc_id = int(request.match_info["id"])
+        except (ValueError, KeyError):
+            return json_response({"error": "Invalid account ID"}, status=400)
         user_id = client_session["user_id"]
 
         async with self.session_factory() as session:
@@ -384,7 +403,10 @@ class MiniAppHandler:
         if not client_session:
             return json_response({"error": "Unauthorized"}, status=401)
 
-        acc_id = int(request.match_info["id"])
+        try:
+            acc_id = int(request.match_info["id"])
+        except (ValueError, KeyError):
+            return json_response({"error": "Invalid account ID"}, status=400)
         user_id = client_session["user_id"]
         derived_key = client_session["derived_key"]
 
@@ -414,7 +436,10 @@ class MiniAppHandler:
         if not client_session:
             return json_response({"error": "Unauthorized"}, status=401)
 
-        acc_id = int(request.match_info["id"])
+        try:
+            acc_id = int(request.match_info["id"])
+        except (ValueError, KeyError):
+            return json_response({"error": "Invalid account ID"}, status=400)
         user_id = client_session["user_id"]
         try:
             body = await request.json()
@@ -471,6 +496,11 @@ class MiniAppHandler:
                 "success": False,
                 "error": f"PIN baru harus terdiri dari {settings.pin_length} digit.",
             }, status=400)
+        if not new_pin.isdigit():
+            return json_response({
+                "success": False,
+                "error": "PIN baru harus berupa angka.",
+            }, status=400)
 
         async with self.session_factory() as session:
             stmt = select(User).where(User.id == user_id)
@@ -524,7 +554,7 @@ class MiniAppHandler:
                     "id": l.id,
                     "action": l.action,
                     "success": l.success,
-                    "timestamp": l.created_at.strftime("%d/%m/%Y %H:%M:%S") if l.created_at else "",
+                    "timestamp": format_local_timestamp(l.created_at, "%d/%m/%Y %H:%M:%S"),
                 }
                 for l in logs
             ]
@@ -560,13 +590,104 @@ class MiniAppHandler:
                     "is_favorite": acc.is_favorite,
                 })
 
+            from datetime import datetime
             await log_action(session, user_id, "miniapp_export_backup", success=True)
             return json_response({
                 "success": True,
                 "total": len(backup_items),
-                "exported_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "exported_at": format_local_timestamp(datetime.now(), "%Y-%m-%d %H:%M:%S"),
                 "accounts": backup_items,
             })
+
+    async def handle_import_backup(self, request: web.Request) -> web.Response:
+        """Import accounts backup from JSON payload."""
+        client_session = self._extract_session(request)
+        if not client_session:
+            return json_response({"error": "Unauthorized"}, status=401)
+
+        user_id = client_session["user_id"]
+        derived_key = client_session["derived_key"]
+
+        try:
+            body = await request.json()
+        except Exception:
+            return json_response({"error": "Invalid JSON body"}, status=400)
+
+        passphrase = str(body.get("passphrase", "")).strip()
+        raw_backup = body.get("backup")
+
+        accounts_to_import = []
+        if isinstance(raw_backup, dict) and "ciphertext" in raw_backup:
+            from services.backup_service import import_accounts_backup
+            import json
+            try:
+                backup_bytes = json.dumps(raw_backup).encode("utf-8")
+                accounts_to_import = import_accounts_backup(backup_bytes, passphrase)
+            except Exception as e:
+                return json_response({"success": False, "error": f"Gagal mendekripsi cadangan: {e}"}, status=400)
+        elif isinstance(raw_backup, dict) and "accounts" in raw_backup and isinstance(raw_backup["accounts"], list):
+            accounts_to_import = raw_backup["accounts"]
+        elif isinstance(raw_backup, list):
+            accounts_to_import = raw_backup
+        elif isinstance(body.get("accounts"), list):
+            accounts_to_import = body["accounts"]
+        else:
+            return json_response({"success": False, "error": "Format data cadangan tidak dikenali."}, status=400)
+
+        if not accounts_to_import:
+            return json_response({"success": False, "error": "Tidak ada akun valid yang ditemukan dalam cadangan."}, status=400)
+
+        imported_count = 0
+        async with self.session_factory() as session:
+            for item in accounts_to_import:
+                if not isinstance(item, dict):
+                    continue
+                sec_raw = str(item.get("secret", "")).strip()
+                cleaned_sec = clean_base32_secret(sec_raw)
+                if not cleaned_sec:
+                    continue
+                lbl = str(item.get("label", "Akun")).strip()[:64] or "Akun"
+                iss = str(item.get("issuer", "")).strip()[:64] or None
+                acc_t = str(item.get("type", "totp")).strip().lower()
+                if acc_t not in ("totp", "hotp"):
+                    acc_t = "totp"
+                dig = 8 if item.get("digits") == 8 else 6
+                try:
+                    per = int(item.get("period", 30))
+                except Exception:
+                    per = 30
+                try:
+                    cnt = max(0, int(item.get("hotp_counter", item.get("counter", 0))))
+                except Exception:
+                    cnt = 0
+                is_fav = bool(item.get("is_favorite", False))
+
+                ciph, nonc = encrypt_secret(derived_key, cleaned_sec)
+                new_acc = Account(
+                    user_id=user_id,
+                    label=lbl,
+                    issuer=iss,
+                    secret_encrypted=ciph,
+                    nonce=nonc,
+                    type=acc_t,
+                    digits=dig,
+                    period=per,
+                    hotp_counter=cnt,
+                    is_favorite=is_fav,
+                )
+                session.add(new_acc)
+                imported_count += 1
+
+            if imported_count > 0:
+                await session.commit()
+                await log_action(session, user_id, "miniapp_import_backup", success=True)
+                return json_response({
+                    "success": True,
+                    "imported": imported_count,
+                    "message": f"Berhasil mengimpor {imported_count} akun.",
+                })
+            else:
+                return json_response({"success": False, "error": "Tidak ada akun valid yang dapat diimpor."}, status=400)
 
 
 def create_mini_app(
@@ -593,6 +714,7 @@ def create_mini_app(
     app.router.add_post("/api/settings/change_pin", handler.handle_change_pin)
     app.router.add_get("/api/settings/logs", handler.handle_get_audit_logs)
     app.router.add_get("/api/settings/backup", handler.handle_export_backup)
+    app.router.add_post("/api/settings/import", handler.handle_import_backup)
 
     # Preflight OPTIONS
     app.router.add_route("OPTIONS", "/{tail:.*}", handle_options)

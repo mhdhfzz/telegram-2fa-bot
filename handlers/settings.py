@@ -22,7 +22,7 @@ from services.lockout_service import (
     record_failed_pin_attempt,
     record_successful_pin_attempt,
 )
-from services.log_service import get_user_logs, log_action
+from services.log_service import format_local_timestamp, get_user_logs, log_action
 
 
 async def auto_delete_phrase_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -668,6 +668,8 @@ async def handle_export_passphrase_message(
                         "type": acc.type,
                         "digits": acc.digits,
                         "period": acc.period,
+                        "hotp_counter": acc.hotp_counter,
+                        "is_favorite": acc.is_favorite,
                     })
 
                 backup_bytes = export_accounts_backup(accounts_data, passphrase)
@@ -736,13 +738,7 @@ async def handle_view_logs_callback(update: Update, context: ContextTypes.DEFAUL
 
     for log in logs:
         # Convert UTC timestamp to local server time (respects VPS/system timezone)
-        ts = log.created_at
-        if ts.tzinfo is not None:
-            local_ts = ts.astimezone()
-        else:
-            from datetime import timezone
-            local_ts = ts.replace(tzinfo=timezone.utc).astimezone()
-        time_str = local_ts.strftime("%Y-%m-%d %H:%M")
+        time_str = format_local_timestamp(log.created_at, "%Y-%m-%d %H:%M")
         status = "✅ Sukses" if log.success else "❌ Gagal"
         action = action_names.get(log.action, log.action)
         log_lines.append(f"• `{time_str}` {action} ({status})")
@@ -1078,9 +1074,10 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                     except Exception:
                         period = 30
                     try:
-                        counter = max(0, int(acc_item.get("counter", 0)))
+                        counter = max(0, int(acc_item.get("hotp_counter", acc_item.get("counter", 0))))
                     except Exception:
                         counter = 0
+                    is_fav = bool(acc_item.get("is_favorite", False))
 
                     new_acc = Account(
                         user_id=user.id,
@@ -1092,6 +1089,7 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                         digits=digits,
                         period=period,
                         hotp_counter=counter,
+                        is_favorite=is_fav,
                     )
                     session.add(new_acc)
 

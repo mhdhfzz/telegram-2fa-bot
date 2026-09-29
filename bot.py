@@ -237,6 +237,39 @@ async def document_message_dispatcher(update: Update, context: ContextTypes.DEFA
         return
 
 
+async def handle_cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Cancel active workflow states and return to main menu."""
+    from handlers.menu import clear_user_workflow_state, show_main_menu
+    clear_user_workflow_state(context.user_data)
+    if update.message:
+        await update.message.reply_text("Operasi dibatalkan. Kembali ke Menu Utama.")
+    await show_main_menu(update, context)
+
+
+async def handle_help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display bot usage instructions and security guide."""
+    text = (
+        "📖 **Panduan Penggunaan 2FA Authenticator Bot**\n\n"
+        "• **/start** - Mulai pendaftaran atau buka Menu Utama\n"
+        "• **/menu** - Buka Dashboard Akun 2FA kapan saja\n"
+        "• **/miniapp** - Informasi dan link akses Web Mini App\n"
+        "• **/cancel** - Batalkan proses input yang sedang berlangsung\n"
+        "• **/help** - Tampilkan pesan panduan bantuan ini\n\n"
+        "🛡️ **Fitur & Keamanan:**\n"
+        "• **AES-256-GCM + Argon2id**: Kunci enkripsi hanya diturunkan dari Master PIN Anda (Zero Master Key).\n"
+        "• **Proteksi Brute-Force**: Akun otomatis terkunci bertingkat jika 5x salah PIN.\n"
+        "• **Auto-Delete**: Pesan rahasia & kode OTP otomatis terhapus dalam 90 detik demi privasi.\n"
+        "• **Mini App Web**: Antarmuka modern dengan Simple Icons & live ticker detik demi detik."
+    )
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📱 Buka Menu Utama", callback_data="menu:back_to_main")]
+    ])
+    if update.message:
+        await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+
 async def on_startup(app: Application) -> None:
     engine = app.bot_data.get("engine")
     if engine:
@@ -339,6 +372,9 @@ def create_application(
     app.bot_data["settings"] = settings
 
     app.add_handler(CommandHandler("start", handle_start_command))
+    app.add_handler(CommandHandler("menu", show_main_menu))
+    app.add_handler(CommandHandler("cancel", handle_cancel_command))
+    app.add_handler(CommandHandler("help", handle_help_command))
     app.add_handler(CommandHandler("miniapp", handle_miniapp_info))
     app.add_handler(CallbackQueryHandler(callback_router))
     app.add_handler(MessageHandler(filters.PHOTO, handle_qr_photo))

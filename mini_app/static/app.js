@@ -83,6 +83,10 @@
     backupOutputArea: document.getElementById('backupOutputArea'),
     backupJsonText: document.getElementById('backupJsonText'),
     btnCopyBackupJson: document.getElementById('btnCopyBackupJson'),
+    inputImportJson: document.getElementById('inputImportJson'),
+    inputImportPassphrase: document.getElementById('inputImportPassphrase'),
+    importBackupMsg: document.getElementById('importBackupMsg'),
+    btnSubmitImportBackup: document.getElementById('btnSubmitImportBackup'),
     auditLogsContainer: document.getElementById('auditLogsContainer'),
 
     toast: document.getElementById('toast'),
@@ -161,6 +165,15 @@
     const sub = document.getElementById('authSubtitle');
     if (sub) {
       sub.textContent = `PIN ${state.pinLength}-digit Master 2FA Anda untuk mendekripsi akun`;
+    }
+    if (el.inputOldPin) el.inputOldPin.setAttribute('maxlength', state.pinLength);
+    if (el.inputNewPin) {
+      el.inputNewPin.setAttribute('maxlength', state.pinLength);
+      el.inputNewPin.setAttribute('placeholder', `Masukkan ${state.pinLength} digit PIN baru`);
+    }
+    if (el.inputConfirmPin) {
+      el.inputConfirmPin.setAttribute('maxlength', state.pinLength);
+      el.inputConfirmPin.setAttribute('placeholder', `Ulangi ${state.pinLength} digit PIN baru`);
     }
     initPinDots();
   }
@@ -873,6 +886,12 @@
       return;
     }
 
+    if (!/^\d+$/.test(newPin)) {
+      el.changePinMsg.textContent = 'PIN baru hanya boleh berisi angka (0-9).';
+      el.changePinMsg.classList.remove('hidden');
+      return;
+    }
+
     if (newPin !== confirmPin) {
       el.changePinMsg.textContent = 'Konfirmasi PIN baru tidak cocok.';
       el.changePinMsg.classList.remove('hidden');
@@ -923,6 +942,53 @@
     navigator.clipboard.writeText(val).then(() => {
       showToast('Data cadangan disalin ke clipboard!', '📋');
     });
+  }
+
+  async function submitImportBackup() {
+    el.importBackupMsg.classList.add('hidden');
+    const rawText = (el.inputImportJson.value || '').trim();
+    const passphrase = (el.inputImportPassphrase.value || '').trim();
+
+    if (!rawText) {
+      el.importBackupMsg.textContent = 'Silakan tempelkan data JSON cadangan terlebih dahulu.';
+      el.importBackupMsg.classList.remove('hidden');
+      return;
+    }
+
+    let parsedPayload;
+    try {
+      parsedPayload = JSON.parse(rawText);
+    } catch (e) {
+      el.importBackupMsg.textContent = 'Format JSON tidak valid. Periksa kembali teks cadangan Anda.';
+      el.importBackupMsg.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/api/settings/import', {
+        method: 'POST',
+        body: JSON.stringify({
+          backup: parsedPayload,
+          passphrase: passphrase,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        el.importBackupMsg.textContent = data.error || 'Gagal mengimpor data cadangan.';
+        el.importBackupMsg.classList.remove('hidden');
+        return;
+      }
+
+      el.inputImportJson.value = '';
+      el.inputImportPassphrase.value = '';
+      closeSettingsModal();
+      showToast(data.message || `Berhasil mengimpor ${data.imported} akun!`, '📥');
+      await loadAccounts();
+    } catch (err) {
+      el.importBackupMsg.textContent = 'Terjadi kesalahan jaringan saat mengimpor cadangan.';
+      el.importBackupMsg.classList.remove('hidden');
+    }
   }
 
   async function loadAuditLogs() {
@@ -995,6 +1061,9 @@
     el.formChangePin.addEventListener('submit', submitChangePin);
     el.btnExportBackup.addEventListener('click', exportBackup);
     el.btnCopyBackupJson.addEventListener('click', copyBackupJson);
+    if (el.btnSubmitImportBackup) {
+      el.btnSubmitImportBackup.addEventListener('click', submitImportBackup);
+    }
 
     // Search
     el.searchInput.addEventListener('input', (e) => {

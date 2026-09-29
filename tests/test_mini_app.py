@@ -438,3 +438,120 @@ async def test_mini_app_advanced_chat_features():
         await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_mini_app_import_backup_and_validation(tmp_path):
+    """Test importing backup, invalid ID error handling, and non-digit PIN validation in Mini App."""
+    db_file = tmp_path / "miniapp_import_test.db"
+    engine = get_async_engine(str(db_file))
+    session_factory = get_session_factory(engine)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    bot_token = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+    pin = "123456"
+    pin_salt = generate_salt()
+    kdf_salt = generate_salt()
+    user_hash = hash_pin(pin, pin_salt)
+
+    telegram_user_id = 9988776655
+    async with session_factory() as session:
+        user = User(
+            telegram_user_id=telegram_user_id,
+            pin_hash=user_hash,
+            pin_hash_salt=pin_salt,
+            kdf_salt=kdf_salt,
+        )
+        session.add(user)
+        await session.commit()
+
+    app = create_mini_app(bot_token, session_factory)
+    client = TestClient(TestServer(app))
+    await client.start_server()
+
+    try:
+        init_data = generate_mock_init_data(bot_token, {"id": telegram_user_id, "first_name": "Importer"})
+
+        # 1. Non-digit PIN validation
+        resp_bad_pin = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": "abcdef"})
+        assert resp_bad_pin.status == 400
+
+        # Login with correct PIN
+        resp_login = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": pin})
+        assert resp_login.status == 200
+        token = (await resp_login.json())["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 2. Add HOTP account - verify response format
+        resp_add_hotp = await client.post("/api/accounts", json={
+            "label": "HOTP Service",
+            "issuer": "GitHub",
+            "secret": "JBSWY3DPEHPK3PXP",
+            "type": "hotp",
+            "digits": 6,
+        }, headers=headers)
+        assert resp_add_hotp.status == 201
+        data_hotp = await resp_add_hotp.json()
+        assert data_hotp["account"]["type"] == "hotp"
+        assert data_hotp["account"]["hotp_counter"] == 0
+        assert data_hotp["account"]["remaining_seconds"] == 0
+
+        # 3. Invalid account ID handling (must return 400, not 500)
+        resp_bad_id = await client.post("/api/accounts/not_an_int/favorite", headers=headers)
+        assert resp_bad_id.status == 400
+
+        resp_bad_del = await client.delete("/api/accounts/abc", headers=headers)
+        assert resp_bad_del.status == 400
+
+        # 4. Import Backup (plain JSON accounts array)
+        backup_payload = {
+            "accounts": [
+                {
+                    "label": "Imported Google",
+                    "issuer": "Google",
+                    "secret": "JBSWY3DPEHPK3PXP",
+                    "type": "totp",
+                    "digits": 6,
+                    "period": 30,
+                    "is_favorite": True,
+                },
+                {
+                    "label": "Imported HOTP",
+                    "issuer": "GitLab",
+                    "secret": "JBSWY3DPEHPK3PXP",
+                    "type": "hotp",
+                    "digits": 8,
+                    "hotp_counter": 12,
+                    "is_favorite": False,
+                },
+            ]
+        }
+        resp_import = await client.post("/api/settings/import", json={"backup": backup_payload}, headers=headers)
+        assert resp_import.status == 200
+        data_import = await resp_import.json()
+        assert data_import["success"] is True
+        assert data_import["imported"] == 2
+
+        # 5. Verify imported accounts are decryptable and counter/favorite preserved
+        resp_accounts = await client.get("/api/accounts", headers=headers)
+        assert resp_accounts.status == 200
+        accs = (await resp_accounts.json())["accounts"]
+        assert len(accs) == 3
+
+        gitlab_acc = next(a for a in accs if a["label"] == "Imported HOTP")
+        assert gitlab_acc["hotp_counter"] == 12
+        assert gitlab_acc["digits"] == 8
+
+        google_acc = next(a for a in accs if a["label"] == "Imported Google")
+        assert google_acc["is_favorite"] is True
+
+        # 6. Change PIN non-digit check
+        resp_bad_chg = await client.post("/api/settings/change_pin", json={"old_pin": pin, "new_pin": "abc123"}, headers=headers)
+        assert resp_bad_chg.status == 400
+
+    finally:
+        await client.close()
+        await engine.dispose()
+
+
+

@@ -275,7 +275,17 @@ async def handle_miniapp_info(update: Update, context: ContextTypes.DEFAULT_TYPE
     settings = get_settings()
     server_status = "🟢 Aktif" if settings.mini_app_enabled else "🔴 Nonaktif"
     port = settings.mini_app_port
-    url = settings.mini_app_url
+    raw_url = settings.mini_app_url
+    url = ""
+    if raw_url:
+        val = str(raw_url).strip()
+        if val:
+            if val.startswith("http://"):
+                url = "https://" + val[7:]
+            elif not val.startswith("https://"):
+                url = f"https://{val}"
+            else:
+                url = val
 
     url_display = f"`{url}`" if url else "_(Belum diatur di .env / MINI_APP_URL)_"
 

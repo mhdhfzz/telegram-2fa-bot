@@ -96,7 +96,7 @@ Seluruh navigasi berbasis **inline button**, **inline numeric keypad**, dan **Te
 ├── deploy/
 │   ├── telegram-2fa-bot.service # Unit file systemd untuk Linux VPS
 │   └── README-deploy.md       # Panduan deployment lengkap di VPS
-└── tests/                     # 104 Automated unit & integration tests (pytest)
+└── tests/                     # 113 Automated unit & integration tests (pytest)
 ```
 
 ---
@@ -216,7 +216,7 @@ Panduan lengkap mengenai setup HTTPS reverse proxy Nginx dan SSL Certbot tersedi
 
 ## 🧪 Pengujian Otomatis (Testing)
 
-Proyek ini memiliki **108 unit dan integration test** yang mencakup seluruh lapisan sistem:
+Proyek ini memiliki **113 unit dan integration test** yang mencakup seluruh lapisan sistem:
 
 ```bash
 pytest -v
@@ -224,24 +224,7 @@ pytest -v
 
 Hasil pengujian:
 ```text
-tests/test_add_account.py .....                            [  5%]
-tests/test_backup.py .....                                 [ 10%]
-tests/test_bot_smoke.py ....                               [ 14%]
-tests/test_config.py ....                                  [ 18%]
-tests/test_crypto.py .......                               [ 25%]
-tests/test_db.py ...                                       [ 28%]
-tests/test_keypad.py ......                                [ 34%]
-tests/test_lockout.py ..                                   [ 36%]
-tests/test_lockout_handlers.py .....                       [ 41%]
-tests/test_menu_handlers.py ............                   [ 52%]
-tests/test_mini_app.py ......                              [ 58%]
-tests/test_otp.py ..........                               [ 67%]
-tests/test_settings.py ........                            [ 75%]
-tests/test_start_handler.py ......                         [ 81%]
-tests/test_view_all_codes.py ...............               [ 95%]
-tests/test_view_code.py ..........                         [100%]
-
-============================ 108 passed in 27.92s =============================
+113 passed in 29.40s (100% PASS)
 ```
 
 ---

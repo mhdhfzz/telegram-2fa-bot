@@ -180,8 +180,8 @@ async def handle_refresh_code(
                             ])
                             await query.edit_message_text("❌ Akun tidak ditemukan.", reply_markup=kb)
                             return
-                        code = generate_hotp_code(secret, acc.hotp_counter, digits=digits)
                         acc.hotp_counter += 1
+                        code = generate_hotp_code(secret, acc.hotp_counter, digits=digits)
                         await session.commit()
                         await log_action(session, user.id, "view_otp", True, account_id=acc.id)
                         code_html = format_otp_display(code)
@@ -513,8 +513,8 @@ async def handle_view_code_pin_keypad(
             auto_del_secs = getattr(settings, "auto_delete_seconds", 90) if settings else 90
 
             if account.type == "hotp":
-                code = generate_hotp_code(secret, account.hotp_counter, digits=account.digits)
                 account.hotp_counter += 1
+                code = generate_hotp_code(secret, account.hotp_counter, digits=account.digits)
                 await session.commit()
                 await log_action(session, user.id, "view_code", True, account_id=account.id)
 
