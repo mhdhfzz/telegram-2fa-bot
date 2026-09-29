@@ -397,3 +397,124 @@ async def test_bot_callback_router_routes_view_all_actions(monkeypatch):
     await callback_router(update, context)
     mock_refresh.assert_awaited_once_with(update, context)
 
+
+@pytest.mark.asyncio
+async def test_view_all_lockout_prevents_access(session_factory, seed_user_and_accounts):
+    import datetime
+    user, _ = seed_user_and_accounts
+
+    # Set user as locked out
+    async with session_factory() as session:
+        from db.models import User
+        u = await session.get(User, user.id)
+        u.failed_pin_attempts = 5
+        u.locked_until = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+        await session.commit()
+
+    update = MagicMock()
+    update.effective_user.id = user.telegram_user_id
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {}
+    context.bot_data = {"session_factory": session_factory}
+
+    await handle_view_all_codes_start(update, context)
+
+    query.edit_message_text.assert_called_once()
+    msg = query.edit_message_text.call_args[0][0]
+    assert "Akun Terkunci!" in msg
+
+
+@pytest.mark.asyncio
+async def test_view_all_cancel_keypad_returns_to_main_menu(session_factory, seed_user_and_accounts):
+    user, _ = seed_user_and_accounts
+    update = MagicMock()
+    update.effective_user.id = user.telegram_user_id
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    query.data = "view_all_pin:press:cancel"
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {"view_all_pin": "123"}
+    context.bot_data = {"session_factory": session_factory}
+
+    await handle_view_all_pin_keypad(update, context)
+
+    assert "view_all_pin" not in context.user_data
+    # Main menu was edited into the message
+    query.edit_message_text.assert_called_once()
+    assert "Telegram 2FA Authenticator" in query.edit_message_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_view_all_session_expired_redirects_to_pin(session_factory, seed_user_and_accounts):
+    user, _ = seed_user_and_accounts
+    update = MagicMock()
+    update.effective_user.id = user.telegram_user_id
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    # Expired session (expires_at in past)
+    context.user_data = {
+        "active_view_all": {
+            "accounts": [],
+            "page": 1,
+            "total_pages": 1,
+            "expires_at": time.time() - 10,
+        }
+    }
+    context.bot_data = {"session_factory": session_factory}
+
+    # Test page switch on expired session
+    await handle_view_all_page(update, context, page=2)
+    query.answer.assert_any_call("⏱️ Sesi telah berakhir. Masukkan PIN kembali.", show_alert=True)
+    # Re-prompted for PIN
+    assert "Buka Semua Kode OTP" in query.edit_message_text.call_args[0][0]
+
+    # Test refresh on expired session
+    query.reset_mock()
+    await handle_view_all_refresh(update, context)
+    query.answer.assert_any_call("⏱️ Sesi telah berakhir. Masukkan PIN kembali.", show_alert=True)
+    assert "Buka Semua Kode OTP" in query.edit_message_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_view_all_page_clamping(session_factory, seed_user_and_accounts):
+    user, _ = seed_user_and_accounts
+    update = MagicMock()
+    update.effective_user.id = user.telegram_user_id
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update.callback_query = query
+
+    context = MagicMock()
+    context.user_data = {
+        "active_view_all": {
+            "accounts": [{"label": f"Acc {i}", "secret": "JBSWY3DPEHPK3PXP", "type": "totp", "digits": 6, "period": 30} for i in range(1, 15)],
+            "page": 1,
+            "total_pages": 2,
+            "expires_at": time.time() + 60,
+        }
+    }
+
+    # Request Page 99 -> Clamped to 2
+    await handle_view_all_page(update, context, page=99)
+    assert context.user_data["active_view_all"]["page"] == 2
+    assert "Halaman 2/2" in query.edit_message_text.call_args[0][0]
+
+    # Request Page -5 -> Clamped to 1
+    await handle_view_all_page(update, context, page=-5)
+    assert context.user_data["active_view_all"]["page"] == 1
+    assert "Halaman 1/2" in query.edit_message_text.call_args[0][0]
+
+
