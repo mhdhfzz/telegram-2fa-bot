@@ -1189,10 +1189,16 @@
     el.formChangePin.addEventListener('submit', submitChangePin);
 
     // Export & Download Backup
+    if (el.btnExportBackup) {
+      el.btnExportBackup.addEventListener('click', (e) => {
+        exportBackup(e);
+      });
+    }
     if (el.formExportBackup) {
-      el.formExportBackup.addEventListener('submit', exportBackup);
-    } else if (el.btnExportBackup) {
-      el.btnExportBackup.addEventListener('click', exportBackup);
+      el.formExportBackup.addEventListener('submit', (e) => {
+        e.preventDefault();
+        exportBackup(e);
+      });
     }
     if (el.btnDownloadBackupFile) {
       el.btnDownloadBackupFile.addEventListener('click', downloadBackupFile);
@@ -1226,10 +1232,16 @@
       });
     }
 
+    if (el.btnSubmitImportBackup) {
+      el.btnSubmitImportBackup.addEventListener('click', (e) => {
+        submitImportBackup(e);
+      });
+    }
     if (el.formImportBackup) {
-      el.formImportBackup.addEventListener('submit', submitImportBackup);
-    } else if (el.btnSubmitImportBackup) {
-      el.btnSubmitImportBackup.addEventListener('click', submitImportBackup);
+      el.formImportBackup.addEventListener('submit', (e) => {
+        e.preventDefault();
+        submitImportBackup(e);
+      });
     }
 
     // Search

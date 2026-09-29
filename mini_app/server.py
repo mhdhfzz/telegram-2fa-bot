@@ -32,10 +32,13 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 
 def security_headers() -> Dict[str, str]:
-    """Strict HTTP security headers for Mini App serving."""
+    """Strict HTTP security headers for Mini App serving with anti-caching."""
     return {
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
         "Content-Security-Policy": (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' https://telegram.org; "
@@ -55,6 +58,9 @@ def cors_headers() -> Dict[str, str]:
         "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Token, X-Telegram-Init-Data",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
     }
     return headers
 
@@ -95,7 +101,17 @@ class MiniAppHandler:
         index_file = STATIC_DIR / "index.html"
         if not index_file.exists():
             return web.Response(text="Mini App frontend static file not found.", status=404)
-        return web.FileResponse(index_file, headers=security_headers())
+
+        import re, time
+        v = int(time.time())
+        try:
+            content = index_file.read_text(encoding="utf-8")
+            content = re.sub(r'/static/app\.js(\?[^"]*)?', f'/static/app.js?v={v}', content)
+            content = re.sub(r'/static/style\.css(\?[^"]*)?', f'/static/style.css?v={v}', content)
+            headers = security_headers()
+            return web.Response(text=content, content_type="text/html", headers=headers)
+        except Exception:
+            return web.FileResponse(index_file, headers=security_headers())
 
     async def handle_status(self, request: web.Request) -> web.Response:
         settings = get_settings()
@@ -603,6 +619,18 @@ class MiniAppHandler:
         elif request.method == "GET":
             passphrase = str(request.query.get("passphrase", "")).strip()
 
+        if not passphrase:
+            return json_response({
+                "success": False,
+                "error": "Passphrase Enkripsi Backup wajib diisi (minimal 4 karakter).",
+            }, status=400)
+
+        if len(passphrase) < 4:
+            return json_response({
+                "success": False,
+                "error": "Passphrase enkripsi minimal 4 karakter.",
+            }, status=400)
+
         async with self.session_factory() as session:
             stmt = select(Account).where(Account.user_id == user_id).order_by(Account.created_at.asc())
             accounts = (await session.execute(stmt)).scalars().all()
@@ -628,51 +656,29 @@ class MiniAppHandler:
                 })
 
             from datetime import datetime
+            from services.backup_service import export_accounts_backup
+            import json
+
             filename = f"telegram_2fa_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            if passphrase:
-                if len(passphrase) < 4:
-                    return json_response({
-                        "success": False,
-                        "error": "Passphrase enkripsi minimal 4 karakter.",
-                    }, status=400)
-
-                from services.backup_service import export_accounts_backup
-                import json
-                try:
-                    backup_bytes = export_accounts_backup(backup_items, passphrase)
-                    envelope_data = json.loads(backup_bytes.decode("utf-8"))
-                except Exception as e:
-                    return json_response({
-                        "success": False,
-                        "error": f"Gagal mengenkripsi cadangan: {e}",
-                    }, status=500)
-
-                await log_action(session, user_id, "miniapp_export_backup", success=True)
+            try:
+                backup_bytes = export_accounts_backup(backup_items, passphrase)
+                envelope_data = json.loads(backup_bytes.decode("utf-8"))
+            except Exception as e:
                 return json_response({
-                    "success": True,
-                    "is_encrypted": True,
-                    "total": len(backup_items),
-                    "filename": filename,
-                    "exported_at": format_local_timestamp(datetime.now(), "%Y-%m-%d %H:%M:%S"),
-                    "backup": envelope_data,
-                    "accounts": backup_items,
-                })
-            else:
-                await log_action(session, user_id, "miniapp_export_backup", success=True)
-                return json_response({
-                    "success": True,
-                    "is_encrypted": False,
-                    "total": len(backup_items),
-                    "filename": filename,
-                    "exported_at": format_local_timestamp(datetime.now(), "%Y-%m-%d %H:%M:%S"),
-                    "accounts": backup_items,
-                    "backup": {
-                        "version": 1,
-                        "format": "telegram_2fa_backup_plain",
-                        "accounts": backup_items,
-                    },
-                })
+                    "success": False,
+                    "error": f"Gagal mengenkripsi cadangan: {e}",
+                }, status=500)
+
+            await log_action(session, user_id, "miniapp_export_backup", success=True)
+            return json_response({
+                "success": True,
+                "is_encrypted": True,
+                "total": len(backup_items),
+                "filename": filename,
+                "exported_at": format_local_timestamp(datetime.now(), "%Y-%m-%d %H:%M:%S"),
+                "backup": envelope_data,
+            })
 
     async def handle_import_backup(self, request: web.Request) -> web.Response:
         """Import accounts backup from JSON payload (encrypted envelope or accounts array)."""

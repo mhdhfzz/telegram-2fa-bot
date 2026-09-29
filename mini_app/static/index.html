@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=20260930_02">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -258,21 +258,21 @@
             <h3 class="settings-subcard-title">📤 Ekspor Cadangan Terenkripsi</h3>
             <p class="settings-info-text">Cadangan Anda diamankan menggunakan enkripsi AES-256-GCM + Argon2id dari passphrase. File cadangan ini kompatibel penuh dengan bot chat Telegram maupun Mini App.</p>
             
-            <form id="formExportBackup" class="modal-form" style="margin-top: 10px;">
+            <form id="formExportBackup" class="modal-form" style="margin-top: 10px;" novalidate>
               <div class="form-group">
                 <label for="inputExportPassphrase">Passphrase Enkripsi Backup <span class="required">*</span></label>
-                <input type="password" id="inputExportPassphrase" placeholder="Passphrase enkripsi (min. 4 karakter)" required autocomplete="new-password">
+                <input type="password" id="inputExportPassphrase" placeholder="Passphrase enkripsi (min. 4 karakter)" autocomplete="new-password">
               </div>
               <div class="form-group">
                 <label for="inputConfirmExportPassphrase">Konfirmasi Passphrase <span class="required">*</span></label>
-                <input type="password" id="inputConfirmExportPassphrase" placeholder="Ulangi passphrase enkripsi" required autocomplete="new-password">
+                <input type="password" id="inputConfirmExportPassphrase" placeholder="Ulangi passphrase enkripsi" autocomplete="new-password">
               </div>
               <div id="exportBackupMsg" class="form-error-msg hidden"></div>
-              <button type="submit" id="btnExportBackup" class="btn-primary full-width">🔒 Buat Cadangan Terenkripsi</button>
+              <button type="button" id="btnExportBackup" class="btn-primary full-width">🔒 Buat Cadangan Terenkripsi</button>
             </form>
 
             <div id="backupOutputArea" class="hidden" style="margin-top: 14px;">
-              <label class="backup-label">Data Cadangan Terenkripsi (JSON):</label>
+              <label class="backup-label">Data Cadangan Terenkripsi (JSON Envelope):</label>
               <textarea id="backupJsonText" readonly rows="5" class="backup-textarea"></textarea>
               <div class="modal-actions" style="margin-top: 6px;">
                 <button type="button" id="btnDownloadBackupFile" class="btn-primary">📥 Unduh File (.json)</button>
@@ -288,7 +288,7 @@
             <h3 class="settings-subcard-title">📥 Impor & Pulihkan Cadangan</h3>
             <p class="settings-info-text">Pulihkan akun dari file <code>.json</code> cadangan bot Telegram atau tempel teks JSON cadangan.</p>
 
-            <form id="formImportBackup" class="modal-form" style="margin-top: 10px;">
+            <form id="formImportBackup" class="modal-form" style="margin-top: 10px;" novalidate>
               <input type="file" id="fileImportBackup" accept=".json,application/json" class="file-input-hidden">
               <button type="button" id="btnChooseBackupFile" class="btn-secondary full-width" style="margin-bottom: 8px;">📁 Pilih File Cadangan (.json)</button>
 
@@ -303,7 +303,7 @@
               </div>
 
               <div id="importBackupMsg" class="form-error-msg hidden"></div>
-              <button type="submit" id="btnSubmitImportBackup" class="btn-primary full-width">📥 Pulihkan & Simpan Akun</button>
+              <button type="button" id="btnSubmitImportBackup" class="btn-primary full-width">📥 Pulihkan & Simpan Akun</button>
             </form>
           </div>
         </div>
@@ -325,6 +325,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=20260930_02"></script>
 </body>
 </html>

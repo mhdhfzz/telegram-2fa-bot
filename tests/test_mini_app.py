@@ -401,13 +401,18 @@ async def test_mini_app_advanced_chat_features():
         assert "miniapp_hotp_next" in actions
         assert "miniapp_edit_account" in actions
 
-        # 5. Export Backup
-        resp_backup = await client.get("/api/settings/backup", headers=headers)
+        # 5. Export Backup (Passphrase is required, fails if missing)
+        resp_backup_fail = await client.get("/api/settings/backup", headers=headers)
+        assert resp_backup_fail.status == 400
+        assert "Passphrase Enkripsi Backup wajib diisi" in (await resp_backup_fail.json())["error"]
+
+        resp_backup = await client.post("/api/settings/backup", json={"passphrase": "backup_passphrase_123"}, headers=headers)
         assert resp_backup.status == 200
         data_backup = await resp_backup.json()
         assert data_backup["total"] == 1
-        assert data_backup["accounts"][0]["label"] == "Office Router"
-        assert data_backup["accounts"][0]["secret"] == "JBSWY3DPEHPK3PXP"
+        assert data_backup["is_encrypted"] is True
+        assert data_backup["backup"]["format"] == "telegram_2fa_backup"
+        assert "ciphertext" in data_backup["backup"]
 
         # 6. Change Master PIN
         # Wrong old pin
