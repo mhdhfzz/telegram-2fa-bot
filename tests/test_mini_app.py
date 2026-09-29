@@ -9,6 +9,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from config import get_settings
 from crypto.cipher import encrypt_secret
 from crypto.kdf import derive_encryption_key, generate_salt, hash_pin
 from db.models import Account, Base, User
@@ -164,6 +165,7 @@ async def test_mini_app_server_flow():
         assert resp.status == 200
         data = await resp.json()
         assert data["status"] == "ok"
+        assert data["pin_length"] == 6
 
         # 2. Init check endpoint
         user_info = {"id": user_id_tg, "first_name": "TestUser"}
@@ -174,14 +176,22 @@ async def test_mini_app_server_flow():
         data_init = await resp_init.json()
         assert data_init["registered"] is True
         assert data_init["telegram_id"] == user_id_tg
+        assert data_init["pin_length"] == 6
 
-        # 3. Auth with wrong PIN
+        # 3. Auth with wrong PIN length (e.g. 4 digits when expecting 6)
+        resp_bad_len = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": "1234"})
+        assert resp_bad_len.status == 400
+        data_bad_len = await resp_bad_len.json()
+        assert data_bad_len["success"] is False
+        assert "PIN harus terdiri dari 6 digit" in data_bad_len["error"]
+
+        # 4. Auth with wrong PIN
         resp_wrong = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": "000000"})
         assert resp_wrong.status == 401
         data_wrong = await resp_wrong.json()
         assert data_wrong["success"] is False
 
-        # 4. Auth with correct PIN
+        # 5. Auth with correct PIN
         resp_auth = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": pin})
         assert resp_auth.status == 200
         data_auth = await resp_auth.json()
@@ -241,3 +251,73 @@ async def test_mini_app_server_flow():
     finally:
         await client.close()
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_mini_app_dynamic_pin_length(monkeypatch):
+    """Verify that Mini App dynamically adheres to PIN_LENGTH configured in environment (e.g. 4 digits)."""
+    monkeypatch.setenv("PIN_LENGTH", "4")
+    get_settings.cache_clear()
+
+    bot_token = "123456:DYNAMIC_PIN_TOKEN"
+    engine = get_async_engine(":memory:")
+    session_factory = get_session_factory(engine)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Seed user with 4-digit PIN
+    pin = "7890"
+    pin_salt = generate_salt()
+    kdf_salt = generate_salt()
+    pin_hash = hash_pin(pin, pin_salt)
+    user_id_tg = 777888999
+
+    async with session_factory() as session:
+        user = User(
+            telegram_user_id=user_id_tg,
+            pin_hash=pin_hash,
+            pin_hash_salt=pin_salt,
+            kdf_salt=kdf_salt,
+            failed_pin_attempts=0,
+        )
+        session.add(user)
+        await session.commit()
+
+    session_mgr = MiniAppSessionManager(default_ttl_seconds=300)
+    app = create_mini_app(bot_token, session_factory, session_mgr)
+
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+
+    try:
+        # Status returns pin_length = 4
+        resp = await client.get("/api/status")
+        data = await resp.json()
+        assert data["pin_length"] == 4
+
+        # Init returns pin_length = 4
+        init_data = generate_mock_init_data(bot_token, {"id": user_id_tg, "first_name": "DynamicUser"})
+        resp_init = await client.post("/api/init", json={"init_data": init_data})
+        data_init = await resp_init.json()
+        assert data_init["pin_length"] == 4
+
+        # 6-digit pin rejected with 400
+        resp_6dig = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": "123456"})
+        assert resp_6dig.status == 400
+        data_6dig = await resp_6dig.json()
+        assert data_6dig["error"] == "PIN harus terdiri dari 4 digit."
+
+        # Correct 4-digit pin accepted
+        resp_auth = await client.post("/api/auth/pin", json={"init_data": init_data, "pin": pin})
+        assert resp_auth.status == 200
+        data_auth = await resp_auth.json()
+        assert data_auth["success"] is True
+        assert data_auth["token"]
+
+    finally:
+        await client.close()
+        await engine.dispose()
+        get_settings.cache_clear()
+

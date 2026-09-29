@@ -140,7 +140,7 @@ Telegram Mini App mewajibkan koneksi HTTPS dengan SSL valid.
 1. Buka [@BotFather](https://t.me/BotFather) di Telegram.
 2. Kirim `/setmenubutton` -> Pilih bot Anda.
 3. Masukkan URL: `https://mfa.domainanda.com`
-4. Masukkan nama tombol: `📱 Buka MFA`
+4. Masukkan nama tombol: `📱 Buka 2FA`
 
 Panduan lengkap mengenai pendaftaran BotFather tersedia di [docs/BOTFATHER_MINI_APP_GUIDE.md](docs/BOTFATHER_MINI_APP_GUIDE.md).
 

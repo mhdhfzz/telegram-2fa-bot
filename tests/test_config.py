@@ -8,7 +8,7 @@ def test_default_settings(monkeypatch):
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     monkeypatch.delenv("PIN_LENGTH", raising=False)
     monkeypatch.delenv("AUTO_DELETE_SECONDS", raising=False)
-    settings = Settings(bot_token="test_token_123")
+    settings = Settings(_env_file=None, bot_token="test_token_123")
     assert settings.bot_token == "test_token_123"
     assert settings.db_path == "2fa_bot.db"
     assert settings.log_level == "INFO"

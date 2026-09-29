@@ -77,10 +77,12 @@ class MiniAppHandler:
         return web.FileResponse(index_file)
 
     async def handle_status(self, request: web.Request) -> web.Response:
+        settings = get_settings()
         return json_response({
             "status": "ok",
             "name": "Telegram 2FA Authenticator Mini App",
             "version": "1.0.0",
+            "pin_length": settings.pin_length,
         })
 
     async def handle_init(self, request: web.Request) -> web.Response:
@@ -142,6 +144,13 @@ class MiniAppHandler:
 
         if not init_data or not pin:
             return json_response({"error": "init_data and pin are required"}, status=400)
+
+        settings = get_settings()
+        if len(pin) != settings.pin_length:
+            return json_response({
+                "success": False,
+                "error": f"PIN harus terdiri dari {settings.pin_length} digit.",
+            }, status=400)
 
         user_info = validate_telegram_init_data(init_data, self.bot_token)
         if not user_info:

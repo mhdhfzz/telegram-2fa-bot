@@ -122,8 +122,57 @@
     return res;
   }
 
+  // --- Dynamic PIN Dots Setup ---
+  function updatePinLength(len) {
+    const parsed = parseInt(len, 10);
+    if (!isNaN(parsed) && parsed >= 4 && parsed <= 8) {
+      state.pinLength = parsed;
+    }
+    const sub = document.getElementById('authSubtitle');
+    if (sub) {
+      sub.textContent = `PIN ${state.pinLength}-digit Master 2FA Anda untuk mendekripsi akun`;
+    }
+    initPinDots();
+  }
+
+  function initPinDots() {
+    if (!el.pinDotsRow) return;
+    el.pinDotsRow.innerHTML = '';
+    for (let i = 0; i < state.pinLength; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'pin-dot';
+      dot.setAttribute('data-index', String(i));
+      el.pinDotsRow.appendChild(dot);
+    }
+    renderPinDots();
+  }
+
+  function renderPinDots() {
+    if (!el.pinDotsRow) return;
+    const dots = el.pinDotsRow.querySelectorAll('.pin-dot');
+    dots.forEach((dot, index) => {
+      if (index < state.pinBuffer.length) {
+        dot.classList.add('filled');
+      } else {
+        dot.classList.remove('filled');
+      }
+    });
+  }
+
   // --- App Startup Check ---
   async function checkInit() {
+    // Read status API to get configured pin length as early as possible
+    try {
+      const statusRes = await fetch('/api/status');
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        if (statusData.pin_length) {
+          updatePinLength(statusData.pin_length);
+        }
+      }
+    } catch (_) {}
+
+    initPinDots();
     showScreen(el.screenLoading);
 
     // If initData is empty (opened directly in regular browser outside Telegram)
@@ -149,7 +198,10 @@
         return;
       }
 
-      state.pinLength = data.pin_length || 6;
+      if (data.pin_length) {
+        updatePinLength(data.pin_length);
+      }
+
       if (data.is_locked) {
         startLockoutCountdown(data.lockout_seconds);
       }
@@ -161,18 +213,6 @@
       showScreen(el.screenNotRegistered);
       el.notRegisteredMsg.textContent = 'Gagal terhubung ke server. Periksa koneksi internet Anda.';
     }
-  }
-
-  // --- PIN Keypad Handling ---
-  function renderPinDots() {
-    const dots = el.pinDotsRow.querySelectorAll('.pin-dot');
-    dots.forEach((dot, index) => {
-      if (index < state.pinBuffer.length) {
-        dot.classList.add('filled');
-      } else {
-        dot.classList.remove('filled');
-      }
-    });
   }
 
   function handleKeypadPress(key) {

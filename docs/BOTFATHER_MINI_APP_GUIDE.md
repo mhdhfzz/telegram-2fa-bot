@@ -1,6 +1,6 @@
 # 📱 Panduan Konfigurasi Telegram Mini App & BotFather
 
-Panduan ini menjelaskan cara mengaktifkan, mengekspos, dan mengonfigurasi **Telegram Mini App (Web App)** untuk bot 2FA MFA Anda di **@BotFather**, lengkap dengan integrasi logo resmi **Simple Icons (simpleicons.org)**.
+Panduan ini menjelaskan cara mengaktifkan, mengekspos, dan mengonfigurasi **Telegram Mini App (Web App)** untuk bot 2FA Anda di **@BotFather**, lengkap dengan integrasi logo resmi **Simple Icons (simpleicons.org)**.
 
 ---
 
@@ -94,7 +94,7 @@ Tombol ini akan selalu muncul di sudut kiri bawah kolom input pesan chat penggun
    ```
 4. Masukkan nama/teks tombol yang ingin ditampilkan:
    ```text
-   📱 Buka MFA
+   📱 Buka 2FA
    ```
 5. Selesai! Pengguna Anda kini dapat membuka Mini App kapan saja dengan 1 klik pada tombol di samping kolom ketik chat.
 
@@ -110,7 +110,7 @@ Jika Anda ingin memiliki direct link seperti `t.me/UsernameBot/app` atau tombol 
 2. Pilih bot Anda.
 3. Masukkan **Title** aplikasi:
    ```text
-   MFA Authenticator
+   2FA Authenticator
    ```
 4. Masukkan **Description** singkat:
    ```text

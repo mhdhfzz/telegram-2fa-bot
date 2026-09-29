@@ -1,1 +1,1 @@
-# Crypto package for MFA Bot
+# Crypto package for 2FA Bot

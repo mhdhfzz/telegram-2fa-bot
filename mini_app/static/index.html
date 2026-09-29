@@ -21,7 +21,7 @@
           </svg>
         </div>
         <div>
-          <h1 class="brand-title">MFA Guard</h1>
+          <h1 class="brand-title">2FA Guard</h1>
           <span class="user-greeting" id="userGreeting">Mengamankan akun Anda</span>
         </div>
       </div>
@@ -49,7 +49,7 @@
         <div class="icon-bubble warning-bubble">⚠️</div>
         <h2>Akun Belum Siap</h2>
         <p id="notRegisteredMsg">Anda belum menyelesaikan pendaftaran PIN di bot Telegram.</p>
-        <p class="subtext">Silakan kembali ke chat bot dan ketik <code>/start</code> untuk mengatur 6-digit Master PIN Anda.</p>
+        <p class="subtext">Silakan kembali ke chat bot dan ketik <code>/start</code> untuk mengatur Master PIN Anda.</p>
         <button id="btnCloseApp" class="btn-primary">Kembali ke Bot</button>
       </div>
     </div>
@@ -62,17 +62,10 @@
           <div class="auth-icon">🔐</div>
         </div>
         <h2 class="auth-title">Masukkan PIN Anda</h2>
-        <p class="auth-subtitle">PIN 6-digit Master MFA Anda untuk mendekripsi akun</p>
+        <p class="auth-subtitle" id="authSubtitle">PIN Master 2FA Anda untuk mendekripsi akun</p>
 
-        <!-- PIN Dots Display -->
-        <div class="pin-dots-row" id="pinDotsRow">
-          <div class="pin-dot"></div>
-          <div class="pin-dot"></div>
-          <div class="pin-dot"></div>
-          <div class="pin-dot"></div>
-          <div class="pin-dot"></div>
-          <div class="pin-dot"></div>
-        </div>
+        <!-- PIN Dots Display (Generated Dynamically) -->
+        <div class="pin-dots-row" id="pinDotsRow"></div>
 
         <div id="pinErrorMsg" class="pin-error-text"></div>
         <div id="pinLockoutMsg" class="pin-lockout-text"></div>
