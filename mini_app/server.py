@@ -36,6 +36,7 @@ def security_headers() -> Dict[str, str]:
     return {
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "clipboard-write=(self), clipboard-read=(self)",
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         "Pragma": "no-cache",
         "Expires": "0",
@@ -58,6 +59,7 @@ def cors_headers() -> Dict[str, str]:
         "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Token, X-Telegram-Init-Data",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "clipboard-write=(self), clipboard-read=(self)",
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         "Pragma": "no-cache",
         "Expires": "0",
@@ -799,7 +801,15 @@ def create_mini_app(
     session_manager: Optional[MiniAppSessionManager] = None,
 ) -> web.Application:
     """Create and configure the aiohttp Web Application for Telegram Mini App."""
-    app = web.Application()
+    @web.middleware
+    async def security_middleware(request: web.Request, handler) -> web.StreamResponse:
+        response = await handler(request)
+        for k, v in security_headers().items():
+            if k not in response.headers:
+                response.headers[k] = v
+        return response
+
+    app = web.Application(middlewares=[security_middleware])
     handler = MiniAppHandler(bot_token, session_factory, session_manager)
 
     # Routes

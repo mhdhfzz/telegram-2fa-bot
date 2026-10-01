@@ -508,7 +508,7 @@
 
       if (action === 'copy') {
         const currentCode = (document.getElementById(`code-${acc.id}`)?.textContent || rawCode).replace(/\s+/g, '');
-        copyCode(currentCode);
+        copyCode(currentCode, acc.id);
       } else if (action === 'favorite') {
         toggleFavorite(acc.id);
       } else if (action === 'edit') {
@@ -543,16 +543,126 @@
     `;
   }
 
-  function copyCode(code) {
+  /**
+   * Multi-strategy clipboard copy supporting Mobile Telegram WebViews (Android/iOS) and Desktop.
+   * Strategy 1: Synchronous execCommand('copy') via temporary textarea.
+   * Strategy 2: Direct DOM text range selection if targetEl provided.
+   * Strategy 3: Modern asynchronous navigator.clipboard.writeText.
+   * Strategy 4: Fallback interactive prompt if environment completely blocks programmatic clipboard access.
+   */
+  async function copyToClipboard(text, targetEl = null) {
+    const clean = String(text ?? '').trim();
+    if (!clean) return false;
+
+    // 1. Synchronous execCommand using temporary offscreen textarea
+    // Must be invoked directly within the user gesture execution context
+    try {
+      const isRTL = document.documentElement.getAttribute('dir') === 'rtl';
+      const textArea = document.createElement('textarea');
+      textArea.value = clean;
+
+      const yPosition = window.pageYOffset || document.documentElement.scrollTop || 0;
+      textArea.style.position = 'fixed';
+      textArea.style.top = `${yPosition}px`;
+      textArea.style[isRTL ? 'right' : 'left'] = '-9999px';
+      textArea.style.width = '2em';
+      textArea.style.height = '2em';
+      textArea.style.padding = '0';
+      textArea.style.border = 'none';
+      textArea.style.outline = 'none';
+      textArea.style.boxShadow = 'none';
+      textArea.style.background = 'transparent';
+      textArea.style.fontSize = '16px'; // Crucial: prevents iOS Safari auto-zoom
+
+      const isIOS = /ipad|iphone|ipod/i.test(navigator.userAgent || '');
+      if (isIOS) {
+        textArea.contentEditable = 'true';
+        textArea.readOnly = false;
+        document.body.appendChild(textArea);
+
+        const range = document.createRange();
+        range.selectNodeContents(textArea);
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+        textArea.setSelectionRange(0, 999999);
+      } else {
+        textArea.setAttribute('readonly', '');
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+      }
+
+      const execOk = document.execCommand('copy');
+      document.body.removeChild(textArea);
+
+      if (execOk) {
+        return true;
+      }
+    } catch (err) {
+      console.warn('execCommand textarea copy failed:', err);
+    }
+
+    // 2. Direct DOM Element Range Selection fallback (if targetEl exists on screen)
+    if (targetEl && window.getSelection) {
+      try {
+        const selection = window.getSelection();
+        if (selection) {
+          const range = document.createRange();
+          range.selectNodeContents(targetEl);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          const execOk = document.execCommand('copy');
+          selection.removeAllRanges();
+          if (execOk) {
+            return true;
+          }
+        }
+      } catch (err) {
+        console.warn('execCommand direct element selection failed:', err);
+      }
+    }
+
+    // 3. Modern Asynchronous Clipboard API (Desktop & modern webviews)
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(clean);
+        return true;
+      } catch (err) {
+        console.warn('navigator.clipboard.writeText failed:', err);
+      }
+    }
+
+    // 4. Interactive fallback if sandbox environment blocks programmatic copy
+    try {
+      if (typeof window.prompt === 'function') {
+        window.prompt('Salin teks secara manual:', clean);
+        return true;
+      }
+    } catch (e) {
+      // Ignored
+    }
+
+    return false;
+  }
+
+  async function copyCode(code, accId = null) {
     const clean = String(code).replace(/\s+/g, '');
-    navigator.clipboard.writeText(clean).then(() => {
+    const targetEl = accId ? document.getElementById(`code-${accId}`) : null;
+    const ok = await copyToClipboard(clean, targetEl);
+    if (ok) {
       if (tg?.HapticFeedback) {
         tg.HapticFeedback.notificationOccurred('success');
       }
       showToast(`Kode ${clean} berhasil disalin!`, '📋');
-    }).catch(() => {
+    } else {
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('error');
+      }
       showToast('Gagal menyalin kode', '❌');
-    });
+    }
   }
 
   async function toggleFavorite(id) {
@@ -1037,17 +1147,21 @@
     }
   }
 
-  function copyBackupJson() {
-    const val = el.backupJsonText.value;
+  async function copyBackupJson() {
+    const val = el.backupJsonText?.value;
     if (!val) return;
-    navigator.clipboard.writeText(val).then(() => {
+    const ok = await copyToClipboard(val, el.backupJsonText);
+    if (ok) {
       if (tg?.HapticFeedback) {
         tg.HapticFeedback.notificationOccurred('success');
       }
       showToast('Data cadangan disalin ke clipboard!', '📋');
-    }).catch(() => {
+    } else {
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('error');
+      }
       showToast('Gagal menyalin data cadangan', '❌');
-    });
+    }
   }
 
   async function submitImportBackup(e) {
