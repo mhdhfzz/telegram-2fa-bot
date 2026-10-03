@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram_Bot_API-v20+-2CA5E0.svg?logo=telegram&logoColor=white)](https://python-telegram-bot.org/)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM%20%7C%20Argon2id-green.svg)](https://cryptography.io/)
-[![Tests](https://img.shields.io/badge/Tests-108%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
+[![Tests](https://img.shields.io/badge/Tests-114%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
 [![Demo Bot](https://img.shields.io/badge/Demo_Bot-@VexAuthKey__bot-26A5E4.svg?logo=telegram&logoColor=white)](https://t.me/VexAuthKey_bot)
 
 Bot Telegram yang berfungsi sebagai aplikasi *two-factor authenticator* mandiri (seperti Google Authenticator / Authy), dihosting di VPS menggunakan Python. Bot mendukung multi-tenant dengan data antar-pengguna terisolasi penuh dan dienkripsi kuat menggunakan PIN pribadi masing-masing user.
@@ -216,7 +216,7 @@ Panduan lengkap mengenai setup HTTPS reverse proxy Nginx dan SSL Certbot tersedi
 
 ## 🧪 Pengujian Otomatis (Testing)
 
-Proyek ini memiliki **113 unit dan integration test** yang mencakup seluruh lapisan sistem:
+Proyek ini memiliki **114 unit dan integration test** yang mencakup seluruh lapisan sistem:
 
 ```bash
 pytest -v
@@ -224,7 +224,7 @@ pytest -v
 
 Hasil pengujian:
 ```text
-113 passed in 29.40s (100% PASS)
+114 passed in 30.58s (100% PASS)
 ```
 
 ---
