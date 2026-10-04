@@ -7,3 +7,6 @@ venv/
 *.db-journal
 *.sqlite3
 .pytest_cache/
+docs/superpowers/
+*.pyc
+.DS_Store
