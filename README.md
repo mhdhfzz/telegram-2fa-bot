@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram_Bot_API-v20+-2CA5E0.svg?logo=telegram&logoColor=white)](https://python-telegram-bot.org/)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM%20%7C%20Argon2id-green.svg)](https://cryptography.io/)
-[![Tests](https://img.shields.io/badge/Tests-114%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
+[![Tests](https://img.shields.io/badge/Tests-120%20Passed-brightgreen.svg)](#pengujian-otomatis-testing)
 [![Demo Bot](https://img.shields.io/badge/Demo_Bot-@VexAuthKey__bot-26A5E4.svg?logo=telegram&logoColor=white)](https://t.me/VexAuthKey_bot)
 
 Bot Telegram yang berfungsi sebagai aplikasi *two-factor authenticator* mandiri (seperti Google Authenticator / Authy), dihosting di VPS menggunakan Python. Bot mendukung multi-tenant dengan data antar-pengguna terisolasi penuh dan dienkripsi kuat menggunakan PIN pribadi masing-masing user.
@@ -41,6 +41,9 @@ Seluruh navigasi berbasis **inline button**, **inline numeric keypad**, dan **Te
 - 🗂️ **Cadangan Terenkripsi (Export/Import)**: Cadangkan seluruh akun ke file JSON yang dienkripsi menggunakan passphrase mandiri (terpisah dari PIN login).
 - 🔑 **Recovery Phrase 12 Kata (Dwi-Bahasa)**: Pemulihan akun menggunakan 12 kata acak (mendukung BIP-39 English standar atau daftar kata bahasa Indonesia).
 - 📜 **Audit Log Transparan**: Riwayat aktivitas akses tanpa mencatat data rahasia (PIN, secret, dan OTP tidak pernah ditulis ke log).
+- 📢 **Broadcast Pengumuman Admin**: Administrator dapat mengirimkan pesan pengumuman ke seluruh pengguna terdaftar secara aman dengan pratinjau (Preview), *anti-flood throttling*, penanganan akun diblokir, dan laporan statistik.
+- 🛠️ **Panel Kontrol Command Admin (`/admin`)**: Menu khusus admin dengan ringkasan seluruh perintah (`/admin`, `/broadcast`, `/stats`) dan tombol pintasan interaktif agar admin tidak perlu membuka catatan manual.
+- 📊 **Statistik Server & Database (`/stats`)**: Pemantauan metrik pengguna terdaftar, total akun 2FA terenkripsi, ukuran database, dan status Mini App.
 
 ---
 
@@ -216,7 +219,7 @@ Panduan lengkap mengenai setup HTTPS reverse proxy Nginx dan SSL Certbot tersedi
 
 ## 🧪 Pengujian Otomatis (Testing)
 
-Proyek ini memiliki **114 unit dan integration test** yang mencakup seluruh lapisan sistem:
+Proyek ini memiliki **120 unit dan integration test** yang mencakup seluruh lapisan sistem:
 
 ```bash
 pytest -v
@@ -224,7 +227,7 @@ pytest -v
 
 Hasil pengujian:
 ```text
-114 passed in 30.58s (100% PASS)
+120 passed in 20.64s (100% PASS)
 ```
 
 ---

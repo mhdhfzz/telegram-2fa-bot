@@ -14,6 +14,20 @@ class Settings(BaseSettings):
     mini_app_host: str = "0.0.0.0"
     mini_app_port: int = 8080
     mini_app_url: str = ""
+    admin_user_ids: str = ""
+
+    def get_admin_ids(self) -> set[int]:
+        if not self.admin_user_ids:
+            return set()
+        ids = set()
+        for item in str(self.admin_user_ids).split(","):
+            item = item.strip()
+            if item.isdigit():
+                ids.add(int(item))
+        return ids
+
+    def is_admin(self, telegram_user_id: int) -> bool:
+        return telegram_user_id in self.get_admin_ids()
 
     @field_validator("mini_app_url", mode="before")
     @classmethod
@@ -39,3 +53,8 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
+
+def is_admin_user(telegram_user_id: int) -> bool:
+    return get_settings().is_admin(telegram_user_id)
+

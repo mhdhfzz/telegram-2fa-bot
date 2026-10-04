@@ -57,3 +57,25 @@ def test_mini_app_url_normalization():
     s4 = Settings(_env_file=None, bot_token="tok", mini_app_url="")
     assert s4.mini_app_url == ""
 
+
+def test_admin_settings_and_helpers():
+    from config import is_admin_user
+
+    # Empty admin IDs
+    s_empty = Settings(_env_file=None, bot_token="tok", admin_user_ids="")
+    assert s_empty.get_admin_ids() == set()
+    assert s_empty.is_admin(12345) is False
+
+    # Single admin ID
+    s_single = Settings(_env_file=None, bot_token="tok", admin_user_ids="123456")
+    assert s_single.get_admin_ids() == {123456}
+    assert s_single.is_admin(123456) is True
+    assert s_single.is_admin(999999) is False
+
+    # Multiple admin IDs with spaces and invalid entries
+    s_multi = Settings(_env_file=None, bot_token="tok", admin_user_ids=" 123456 , 789012 , abc , 345678 ")
+    assert s_multi.get_admin_ids() == {123456, 789012, 345678}
+    assert s_multi.is_admin(789012) is True
+    assert s_multi.is_admin(111111) is False
+
+

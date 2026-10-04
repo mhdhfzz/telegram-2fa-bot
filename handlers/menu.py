@@ -2,10 +2,12 @@ from typing import Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
-from config import get_settings
+from config import get_settings, is_admin_user
 
 
-def get_main_menu_keyboard(mini_app_url: Optional[str] = None) -> InlineKeyboardMarkup:
+def get_main_menu_keyboard(
+    mini_app_url: Optional[str] = None, user_id: Optional[int] = None
+) -> InlineKeyboardMarkup:
     raw_url = mini_app_url or get_settings().mini_app_url
     url = ""
     if raw_url:
@@ -47,6 +49,13 @@ def get_main_menu_keyboard(mini_app_url: Optional[str] = None) -> InlineKeyboard
             InlineKeyboardButton("⚙️ Pengaturan", callback_data="menu:settings"),
         ],
     ])
+
+    # Show Admin Dashboard button if the user is an authorized admin
+    if user_id and is_admin_user(user_id):
+        keyboard.append([
+            InlineKeyboardButton("🛠️ Panel Admin", callback_data="admin:menu"),
+        ])
+
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -63,6 +72,8 @@ def clear_user_workflow_state(user_data: dict) -> None:
         "del_acc_id",
         "menu_state",
         "settings_state",
+        "admin_state",
+        "broadcast_draft",
         "export_auth_pin",
         "import_file_bytes",
         "import_accounts_data",
@@ -100,7 +111,8 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "🔐 **Telegram 2FA Authenticator**\n\n"
         "Pilih menu di bawah ini untuk melihat kode OTP atau mengelola akun Anda:"
     )
-    keyboard = get_main_menu_keyboard()
+    user_id = update.effective_user.id if update.effective_user else None
+    keyboard = get_main_menu_keyboard(user_id=user_id)
 
     active_view = context.user_data.get("active_view")
     if active_view and isinstance(active_view, dict) and update.effective_chat:

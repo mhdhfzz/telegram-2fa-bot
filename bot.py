@@ -14,6 +14,14 @@ from telegram.ext import (
 )
 from config import get_settings
 from db.session import get_async_engine, get_session_factory, init_db
+from handlers.admin import (
+    handle_admin_command,
+    handle_broadcast_cancel_callback,
+    handle_broadcast_confirm_callback,
+    handle_broadcast_content_input,
+    handle_broadcast_start,
+    handle_stats_command,
+)
 from handlers.add_account import (
     handle_add_account_menu,
     handle_add_account_pin_keypad,
@@ -180,6 +188,16 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await handle_import_pin_keypad(update, context)
     elif data.startswith("settings:logs:"):
         await handle_view_logs_callback(update, context)
+    elif data == "admin:menu":
+        await handle_admin_command(update, context)
+    elif data == "admin:stats":
+        await handle_stats_command(update, context)
+    elif data == "admin:broadcast_start":
+        await handle_broadcast_start(update, context)
+    elif data == "admin:broadcast_confirm":
+        await handle_broadcast_confirm_callback(update, context)
+    elif data == "admin:broadcast_cancel":
+        await handle_broadcast_cancel_callback(update, context)
 
 
 async def text_message_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -222,6 +240,11 @@ async def text_message_dispatcher(update: Update, context: ContextTypes.DEFAULT_
         return
     elif settings_state == "awaiting_import_passphrase":
         await handle_import_passphrase_message(update, context)
+        return
+
+    admin_state = context.user_data.get("admin_state")
+    if admin_state == "awaiting_broadcast_content":
+        await handle_broadcast_content_input(update, context)
         return
 
 
@@ -376,6 +399,9 @@ def create_application(
     app.add_handler(CommandHandler("cancel", handle_cancel_command))
     app.add_handler(CommandHandler("help", handle_help_command))
     app.add_handler(CommandHandler("miniapp", handle_miniapp_info))
+    app.add_handler(CommandHandler("admin", handle_admin_command))
+    app.add_handler(CommandHandler("broadcast", handle_broadcast_start))
+    app.add_handler(CommandHandler("stats", handle_stats_command))
     app.add_handler(CallbackQueryHandler(callback_router))
     app.add_handler(MessageHandler(filters.PHOTO, handle_qr_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, document_message_dispatcher))
