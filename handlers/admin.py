@@ -1,6 +1,6 @@
 """
 Admin management and broadcast handlers for Telegram 2FA Authenticator Bot.
-Provides dashboard control, bot statistics, and safe multi-recipient broadcasting with throttling.
+Provides dashboard control, bot statistics, and safe multi-recipient broadcasting with Telegram HTML support and throttling.
 """
 
 import asyncio
@@ -31,17 +31,17 @@ def check_admin_access(update: Update) -> bool:
 async def reject_unauthorized(update: Update) -> None:
     """Send access denied notification to unauthorized users."""
     text = (
-        "⛔ **Akses Ditolak**\n\n"
+        "⛔ <b>Akses Ditolak</b>\n\n"
         "Perintah ini hanya dapat diakses oleh Administrator Bot yang terdaftar."
     )
     if update.callback_query:
         try:
             await update.callback_query.answer("⛔ Akses ditolak: Khusus Administrator", show_alert=True)
-            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.HTML)
         except Exception:
             pass
     elif update.effective_message:
-        await update.effective_message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
 async def handle_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -56,19 +56,18 @@ async def handle_admin_command(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.pop("admin_state", None)
     context.user_data.pop("broadcast_draft", None)
 
-    settings = get_settings()
     admin_id = update.effective_user.id if update.effective_user else "N/A"
 
     text = (
-        "🛠️ **PANEL KONTROL ADMINISTRATOR**\n\n"
-        f"Halo Admin (`ID: {admin_id}`)! Anda memiliki hak akses penuh ke manajemen bot.\n\n"
-        "📋 **Daftar Perintah Admin (Command List):**\n"
-        "• **/admin** - Buka panel kontrol & bantuan admin ini\n"
-        "• **/broadcast** - Kirim pengumuman pesan ke seluruh pengguna bot\n"
-        "• **/stats** - Lihat ringkasan metrik pengguna & database server\n"
-        "• **/cancel** - Batalkan alur input/broadcast yang sedang aktif\n"
-        "• **/menu** - Buka menu utama akun 2FA pribadi Anda\n\n"
-        "💡 *Tips: Tekan tombol interaktif di bawah untuk eksekusi cepat tanpa repot mengetik perintah.*"
+        "🛠️ <b>PANEL KONTROL ADMINISTRATOR</b>\n\n"
+        f"Halo Admin (<code>ID: {admin_id}</code>)! Anda memiliki hak akses penuh ke manajemen bot.\n\n"
+        "📋 <b>Daftar Perintah Admin (Command List):</b>\n"
+        "• <b>/admin</b> — Buka panel kontrol & bantuan admin ini\n"
+        "• <b>/broadcast</b> — Kirim pengumuman pesan ke seluruh pengguna bot (Support HTML & Plain)\n"
+        "• <b>/stats</b> — Lihat ringkasan metrik pengguna & database server\n"
+        "• <b>/cancel</b> — Batalkan alur input/broadcast yang sedang aktif\n"
+        "• <b>/menu</b> — Buka menu utama akun 2FA pribadi Anda\n\n"
+        "💡 <i>Tips: Tekan tombol interaktif di bawah untuk eksekusi cepat tanpa repot mengetik perintah.</i>"
     )
 
     markup = InlineKeyboardMarkup([
@@ -83,17 +82,28 @@ async def handle_admin_command(update: Update, context: ContextTypes.DEFAULT_TYP
     if update.callback_query:
         try:
             await update.callback_query.answer()
-            await update.callback_query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            await update.callback_query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+        except BadRequest as e:
+            if "entity" in str(e).lower() or "parse" in str(e).lower():
+                await update.callback_query.edit_message_text(text, reply_markup=markup)
+            else:
+                raise
         except Exception:
             if update.effective_message:
-                await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+                await update.effective_message.reply_text(text, reply_markup=markup)
     elif update.effective_message:
-        await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+        except BadRequest as e:
+            if "entity" in str(e).lower() or "parse" in str(e).lower():
+                await update.effective_message.reply_text(text, reply_markup=markup)
+            else:
+                raise
 
 
 async def handle_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Display comprehensive bot and database usage statistics.
+    Display comprehensive bot and database usage statistics using Telegram HTML formatting.
     """
     if not check_admin_access(update):
         await reject_unauthorized(update)
@@ -125,26 +135,27 @@ async def handle_stats_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
     mini_app_status = "Aktif ✅" if settings.mini_app_enabled else "Nonaktif ❌"
     mini_app_url_info = settings.mini_app_url or f"http://{settings.mini_app_host}:{settings.mini_app_port}"
+    db_filename = os.path.basename(settings.db_path)
 
     text = (
-        "📊 **STATISTIK SISTEM & PENGGUNA BOT**\n\n"
-        "👥 **Metrik Pengguna & Akun:**\n"
-        f"• Total Pengguna Terdaftar: **{total_users:,}** user\n"
-        f"• Pengguna Aktif (Ada Akun): **{active_users:,}** user\n"
-        f"• Total Akun 2FA Terenkripsi: **{total_accounts:,}** akun\n"
-        f"• Rata-rata Akun per User Aktif: **{(total_accounts / active_users):.1f}**\n\n" if active_users > 0 else (
-            f"• Total Pengguna Terdaftar: **{total_users:,}** user\n"
-            f"• Pengguna Aktif (Ada Akun): **{active_users:,}** user\n"
-            f"• Total Akun 2FA Terenkripsi: **{total_accounts:,}** akun\n\n"
-        )
+        "📊 <b>STATISTIK SISTEM & PENGGUNA BOT</b>\n\n"
+        "👥 <b>Metrik Pengguna & Akun:</b>\n"
+        f"• Total Pengguna Terdaftar: <b>{total_users:,}</b> user\n"
+        f"• Pengguna Aktif (Ada Akun): <b>{active_users:,}</b> user\n"
+        f"• Total Akun 2FA Terenkripsi: <b>{total_accounts:,}</b> akun\n"
     )
+    if active_users > 0:
+        text += f"• Rata-rata Akun per User: <b>{(total_accounts / active_users):.1f}</b>\n\n"
+    else:
+        text += "\n"
+
     text += (
-        "⚙️ **Konfigurasi & Server:**\n"
-        f"• Panjang Master PIN: **{settings.pin_length} digit**\n"
-        f"• Auto-Delete Timer: **{settings.auto_delete_seconds} detik**\n"
-        f"• Ukuran Database ({os.path.basename(settings.db_path)}): **{db_size_str}**\n"
-        f"• Status Mini App: **{mini_app_status}**\n"
-        f"• Endpoint Mini App: `{mini_app_url_info}`\n"
+        "⚙️ <b>Konfigurasi & Server:</b>\n"
+        f"• Panjang Master PIN: <b>{settings.pin_length} digit</b>\n"
+        f"• Auto-Delete Timer: <b>{settings.auto_delete_seconds} detik</b>\n"
+        f"• Ukuran Database (<code>{db_filename}</code>): <b>{db_size_str}</b>\n"
+        f"• Status Mini App: <b>{mini_app_status}</b>\n"
+        f"• Endpoint Mini App: <code>{mini_app_url_info}</code>\n"
     )
 
     markup = InlineKeyboardMarkup([
@@ -155,17 +166,28 @@ async def handle_stats_command(update: Update, context: ContextTypes.DEFAULT_TYP
     if update.callback_query:
         try:
             await update.callback_query.answer()
-            await update.callback_query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            await update.callback_query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+        except BadRequest as e:
+            if "entity" in str(e).lower() or "parse" in str(e).lower():
+                await update.callback_query.edit_message_text(text, reply_markup=markup)
+            else:
+                raise
         except Exception:
             if update.effective_message:
-                await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+                await update.effective_message.reply_text(text, reply_markup=markup)
     elif update.effective_message:
-        await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        try:
+            await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+        except BadRequest as e:
+            if "entity" in str(e).lower() or "parse" in str(e).lower():
+                await update.effective_message.reply_text(text, reply_markup=markup)
+            else:
+                raise
 
 
 async def handle_broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Prompt admin to write/send the broadcast message content.
+    Prompt admin to write/send the broadcast message content with Telegram HTML syntax guide.
     """
     if not check_admin_access(update):
         await reject_unauthorized(update)
@@ -181,12 +203,17 @@ async def handle_broadcast_start(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data.pop("broadcast_draft", None)
 
     text = (
-        "📢 **KIRIM PESAN BROADCAST KE SELURUH PENGGUNA**\n\n"
-        f"👥 **Jumlah Target:** **{total_users:,}** pengguna terdaftar.\n\n"
-        "Silakan **ketik atau kirimkan teks pesan** yang ingin Anda siarkan sekarang.\n"
-        "Anda dapat menggunakan format teks tebal, miring, monospace, emoji, atau link.\n\n"
-        "⚠️ *Pesan TIDAK AKAN langsung dikirim. Bot akan menampilkan pratinjau (preview) terlebih dahulu untuk persetujuan Anda.*\n\n"
-        "Ketik **/cancel** atau tekan tombol di bawah untuk membatalkan."
+        "📢 <b>KIRIM PESAN BROADCAST KE SELURUH PENGGUNA</b>\n\n"
+        f"👥 <b>Jumlah Target:</b> <b>{total_users:,}</b> pengguna terdaftar.\n\n"
+        "Silakan <b>ketik atau kirimkan teks pesan</b> yang ingin Anda siarkan sekarang.\n\n"
+        "✨ <b>Dukungan Format HTML Telegram & Emoji:</b>\n"
+        "• <code>&lt;b&gt;teks tebal&lt;/b&gt;</code> → <b>teks tebal</b>\n"
+        "• <code>&lt;i&gt;teks miring&lt;/i&gt;</code> → <i>teks miring</i>\n"
+        "• <code>&lt;code&gt;kode monospace&lt;/code&gt;</code> → <code>kode monospace</code>\n"
+        "• <code>&lt;a href=\"https://link.com\"&gt;nama link&lt;/a&gt;</code> → tautan link\n"
+        "• <code>&lt;tg-spoiler&gt;teks sensor&lt;/tg-spoiler&gt;</code> → sensor spoiler\n\n"
+        "⚠️ <i>Pesan TIDAK AKAN langsung dikirim. Bot akan menampilkan pratinjau (preview) terlebih dahulu untuk persetujuan Anda.</i>\n\n"
+        "Ketik <b>/cancel</b> atau tekan tombol di bawah untuk membatalkan."
     )
 
     markup = InlineKeyboardMarkup([
@@ -196,17 +223,17 @@ async def handle_broadcast_start(update: Update, context: ContextTypes.DEFAULT_T
     if update.callback_query:
         try:
             await update.callback_query.answer()
-            await update.callback_query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            await update.callback_query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
         except Exception:
             if update.effective_message:
-                await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+                await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
     elif update.effective_message:
-        await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        await update.effective_message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
 
 
 async def handle_broadcast_content_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Receive the broadcast content from admin and display a preview with confirmation buttons.
+    Receive the broadcast content from admin and display a preview supporting Telegram HTML.
     """
     if not check_admin_access(update):
         await reject_unauthorized(update)
@@ -228,11 +255,11 @@ async def handle_broadcast_content_input(update: Update, context: ContextTypes.D
             total_users = (await session.execute(select(func.count(User.id)))).scalar() or 0
 
     preview_text = (
-        "📢 **PRATINJAU BROADCAST (PREVIEW)**\n"
+        "📢 <b>PRATINJAU BROADCAST (PREVIEW)</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"{content}\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"👥 **Target Pengiriman:** **{total_users:,}** pengguna terdaftar\n\n"
+        f"👥 <b>Target Pengiriman:</b> <b>{total_users:,}</b> pengguna terdaftar\n\n"
         "Apakah Anda yakin ingin mengirimkan pesan ini ke seluruh pengguna sekarang?"
     )
 
@@ -242,12 +269,19 @@ async def handle_broadcast_content_input(update: Update, context: ContextTypes.D
         [InlineKeyboardButton("❌ Batalkan", callback_data="admin:broadcast_cancel")],
     ])
 
-    await update.effective_message.reply_text(preview_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+    # Try HTML first, fallback to Markdown, then Plain Text
+    try:
+        await update.effective_message.reply_text(preview_text, reply_markup=markup, parse_mode=ParseMode.HTML)
+    except BadRequest:
+        try:
+            await update.effective_message.reply_text(preview_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        except BadRequest:
+            await update.effective_message.reply_text(preview_text, reply_markup=markup)
 
 
 async def handle_broadcast_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Execute broadcast loop to all users with throttling and error handling.
+    Execute broadcast loop to all users with Telegram HTML support, throttling, and graceful fallbacks.
     """
     if not check_admin_access(update):
         await reject_unauthorized(update)
@@ -290,10 +324,10 @@ async def handle_broadcast_confirm_callback(update: Update, context: ContextType
     status_msg = None
     if query:
         status_msg = await query.edit_message_text(
-            f"⏳ **Mengirimkan Broadcast...**\n"
+            f"⏳ <b>Mengirimkan Broadcast...</b>\n"
             f"Memproses pengiriman ke {total_target} pengguna.\n"
             "Mohon jangan tutup obrolan hingga laporan selesai.",
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.HTML,
         )
 
     start_time = time.time()
@@ -301,14 +335,17 @@ async def handle_broadcast_confirm_callback(update: Update, context: ContextType
     blocked_count = 0
     failed_count = 0
 
-    outbound_text = f"📢 **PENGUMUMAN DARI ADMIN**\n\n{draft}"
+    outbound_html = f"📢 <b>PENGUMUMAN DARI ADMIN</b>\n\n{draft}"
+    outbound_md = f"📢 **PENGUMUMAN DARI ADMIN**\n\n{draft}"
+    outbound_plain = f"📢 PENGUMUMAN DARI ADMIN\n\n{draft}"
 
     for target_id in user_ids:
         try:
+            # 1. Try sending with HTML format
             await context.bot.send_message(
                 chat_id=target_id,
-                text=outbound_text,
-                parse_mode=ParseMode.MARKDOWN,
+                text=outbound_html,
+                parse_mode=ParseMode.HTML,
                 disable_web_page_preview=True,
             )
             success_count += 1
@@ -317,17 +354,29 @@ async def handle_broadcast_confirm_callback(update: Update, context: ContextType
             blocked_count += 1
             logger.info("Broadcast skipped for user %s: Bot blocked/deactivated", target_id)
         except BadRequest as e:
-            # Formatting error fallback: send as plain text
+            # 2. If HTML failed, try Markdown format
             try:
                 await context.bot.send_message(
                     chat_id=target_id,
-                    text=f"📢 PENGUMUMAN DARI ADMIN\n\n{draft}",
+                    text=outbound_md,
+                    parse_mode=ParseMode.MARKDOWN,
                     disable_web_page_preview=True,
                 )
                 success_count += 1
+            except BadRequest:
+                # 3. If Markdown also failed, fallback to plain text
+                try:
+                    await context.bot.send_message(
+                        chat_id=target_id,
+                        text=outbound_plain,
+                        disable_web_page_preview=True,
+                    )
+                    success_count += 1
+                except Exception:
+                    failed_count += 1
+                    logger.warning("Broadcast failed for user %s: %s", target_id, e)
             except Exception:
                 failed_count += 1
-                logger.warning("Broadcast failed for user %s: %s", target_id, e)
         except Exception as exc:
             failed_count += 1
             logger.warning("Broadcast error for user %s: %s", target_id, exc)
@@ -342,13 +391,13 @@ async def handle_broadcast_confirm_callback(update: Update, context: ContextType
     context.user_data.pop("broadcast_draft", None)
 
     report_text = (
-        "🎉 **BROADCAST SELESAI DIKIRIMKAN!**\n\n"
-        "📊 **Laporan Statistik Pengiriman:**\n"
-        f"• 👥 Total Target: **{total_target:,}** pengguna\n"
-        f"• ✅ Berhasil Terkirim: **{success_count:,}**\n"
-        f"• 🚫 Diblokir / Akun Nonaktif: **{blocked_count:,}**\n"
-        f"• ⚠️ Gagal Lainnya: **{failed_count:,}**\n"
-        f"• ⏱️ Durasi Waktu: **{duration} detik**\n"
+        "🎉 <b>BROADCAST SELESAI DIKIRIMKAN!</b>\n\n"
+        "📊 <b>Laporan Statistik Pengiriman:</b>\n"
+        f"• 👥 Total Target: <b>{total_target:,}</b> pengguna\n"
+        f"• ✅ Berhasil Terkirim: <b>{success_count:,}</b>\n"
+        f"• 🚫 Diblokir / Akun Nonaktif: <b>{blocked_count:,}</b>\n"
+        f"• ⚠️ Gagal Lainnya: <b>{failed_count:,}</b>\n"
+        f"• ⏱️ Durasi Waktu: <b>{duration} detik</b>\n"
     )
 
     markup = InlineKeyboardMarkup([
@@ -358,12 +407,12 @@ async def handle_broadcast_confirm_callback(update: Update, context: ContextType
 
     if status_msg:
         try:
-            await status_msg.edit_text(report_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            await status_msg.edit_text(report_text, reply_markup=markup, parse_mode=ParseMode.HTML)
         except Exception:
             if update.effective_message:
-                await update.effective_message.reply_text(report_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+                await update.effective_message.reply_text(report_text, reply_markup=markup, parse_mode=ParseMode.HTML)
     elif update.effective_message:
-        await update.effective_message.reply_text(report_text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+        await update.effective_message.reply_text(report_text, reply_markup=markup, parse_mode=ParseMode.HTML)
 
 
 async def handle_broadcast_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

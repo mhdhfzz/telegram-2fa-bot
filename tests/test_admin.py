@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from telegram import Update, User as TgUser, Message, CallbackQuery
+from telegram.constants import ParseMode
 from telegram.error import BadRequest, Forbidden
 from telegram.ext import ContextTypes
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
@@ -139,8 +140,29 @@ async def test_admin_stats_command(admin_settings, memory_db):
     text = msg.reply_text.call_args[0][0]
 
     assert "STATISTIK SISTEM & PENGGUNA BOT" in text
-    assert "Total Pengguna Terdaftar: **1**" in text
-    assert "Total Akun 2FA Terenkripsi: **1**" in text
+    assert "Total Pengguna Terdaftar: <b>1</b>" in text
+    assert "Total Akun 2FA Terenkripsi: <b>1</b>" in text
+    # Verify database name is enclosed in <code> tags to prevent parsing errors
+    import os
+    assert f"<code>{os.path.basename(admin_settings.db_path)}</code>" in text
+
+    # Test callback query flow with BadRequest parse error fallback
+    cb_update = MagicMock(spec=Update)
+    cb_update.effective_user = tg_user
+    cb = AsyncMock(spec=CallbackQuery)
+    # First call with parse_mode fails with entity parse error, second call without parse_mode succeeds
+    cb.edit_message_text.side_effect = [
+        BadRequest("Can't parse entities: can't find end of the entity starting at byte offset 374"),
+        AsyncMock(),
+    ]
+    cb_update.callback_query = cb
+    cb_update.effective_message = None
+
+    await handle_stats_command(cb_update, context)
+    assert cb.edit_message_text.call_count == 2
+    # Second call should not have parse_mode argument
+    fallback_kwargs = cb.edit_message_text.call_args_list[1][1]
+    assert "parse_mode" not in fallback_kwargs
 
 
 @pytest.mark.asyncio
@@ -169,15 +191,16 @@ async def test_admin_broadcast_flow(admin_settings, memory_db):
     assert context.user_data.get("admin_state") == "awaiting_broadcast_content"
     assert "KIRIM PESAN BROADCAST" in msg.reply_text.call_args[0][0]
 
-    # Step 2: Admin sends text message content
+    # Step 2: Admin sends text message with Telegram HTML format
     msg.reply_text.reset_mock()
-    msg.text = "🚨 Pemberitahuan: Server akan restart pukul 00:00 WIB."
+    msg.text = "🚨 <b>Pemberitahuan:</b> Server akan restart pada pukul <code>00:00 WIB</code>. Info: <a href='https://example.com'>Klik Di Sini</a>"
     await handle_broadcast_content_input(update, context)
 
     assert context.user_data.get("broadcast_draft") == msg.text
     preview_call = msg.reply_text.call_args
     assert "PRATINJAU BROADCAST (PREVIEW)" in preview_call[0][0]
-    assert "Pemberitahuan: Server akan restart" in preview_call[0][0]
+    assert "<b>Pemberitahuan:</b>" in preview_call[0][0]
+    assert preview_call[1].get("parse_mode") == ParseMode.HTML
 
     # Step 3: Admin cancels broadcast
     cb_cancel_update = MagicMock(spec=Update)
@@ -192,8 +215,8 @@ async def test_admin_broadcast_flow(admin_settings, memory_db):
     cb_cancel.edit_message_text.assert_called_once()
     assert "dibatalkan" in cb_cancel.edit_message_text.call_args[0][0]
 
-    # Step 4: Admin confirms broadcast execution
-    context.user_data["broadcast_draft"] = "Info Fitur Baru: Mini App Update!"
+    # Step 4: Admin confirms broadcast execution with HTML content
+    context.user_data["broadcast_draft"] = "🎉 <b>Update v2.0:</b> Fitur Mini App & <i>HTML Broadcast</i> telah aktif!"
     cb_confirm_update = MagicMock(spec=Update)
     cb_confirm_update.effective_user = tg_user
     cb_confirm = AsyncMock(spec=CallbackQuery)
@@ -206,7 +229,7 @@ async def test_admin_broadcast_flow(admin_settings, memory_db):
     async def mock_send_message(chat_id, text, **kwargs):
         if chat_id == 1002:
             raise Forbidden("Bot was blocked by the user")
-        elif chat_id == 1003 and kwargs.get("parse_mode"):
+        elif chat_id == 1003 and kwargs.get("parse_mode") == ParseMode.HTML:
             raise BadRequest("Can't parse entities")
         return MagicMock()
 
@@ -225,9 +248,9 @@ async def test_admin_broadcast_flow(admin_settings, memory_db):
     report_text = status_msg.edit_text.call_args[0][0]
 
     assert "BROADCAST SELESAI DIKIRIMKAN" in report_text
-    assert "Total Target: **3**" in report_text
-    assert "Berhasil Terkirim: **2**" in report_text
-    assert "Diblokir / Akun Nonaktif: **1**" in report_text
+    assert "Total Target: <b>3</b>" in report_text
+    assert "Berhasil Terkirim: <b>2</b>" in report_text
+    assert "Diblokir / Akun Nonaktif: <b>1</b>" in report_text
 
 
 def test_main_menu_admin_button(admin_settings):
