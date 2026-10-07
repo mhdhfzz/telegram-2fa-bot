@@ -3,6 +3,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from telegram.constants import ParseMode
 from crypto.cipher import decrypt_secret, encrypt_secret
 from crypto.kdf import derive_encryption_key, generate_salt, hash_pin
 from db.models import Account, AccessLog, User
@@ -162,6 +163,7 @@ async def test_view_logs_paginated(session_factory, seed_user_with_secret):
     assert "Log Akses" in args[0]
     assert "Lihat Semua Kode (✅ Sukses)" in args[0]
     assert "PIN Semua Kode Salah (❌ Gagal)" in args[0]
+    assert kwargs.get("parse_mode") == ParseMode.HTML
     kb = kwargs["reply_markup"].inline_keyboard
     texts = [btn.text for row in kb for btn in row]
     # Page 1 of 2 should have Next button
@@ -171,6 +173,69 @@ async def test_view_logs_paginated(session_factory, seed_user_with_secret):
     query.data = "settings:logs:invalid_page"
     await handle_view_logs_callback(update, context)
     assert query.edit_message_text.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_view_logs_with_underscores_and_special_chars(session_factory, seed_user_with_secret):
+    user, _ = seed_user_with_secret
+    update = MagicMock()
+    update.effective_user.id = user.telegram_user_id
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    query.data = "settings:logs:1"
+    update.callback_query = query
+
+    context = MagicMock()
+    context.bot_data = {"session_factory": session_factory}
+
+    async with session_factory() as session:
+        session.add(AccessLog(user_id=user.id, action="miniapp_login", success=True))
+        session.add(AccessLog(user_id=user.id, action="miniapp_view_codes", success=True))
+        session.add(AccessLog(user_id=user.id, action="custom_unknown_action", success=False))
+        session.add(AccessLog(user_id=user.id, action="<dangerous_tag>", success=True))
+        await session.commit()
+
+    await handle_view_logs_callback(update, context)
+
+    query.edit_message_text.assert_called_once()
+    args, kwargs = query.edit_message_text.call_args
+    rendered_text = args[0]
+    assert kwargs.get("parse_mode") == ParseMode.HTML
+    assert "Login Mini App (✅ Sukses)" in rendered_text
+    assert "Lihat Kode (Mini App) (✅ Sukses)" in rendered_text
+    assert "Custom Unknown Action (❌ Gagal)" in rendered_text
+    # Verify HTML escaping
+    assert "&lt;Dangerous Tag&gt;" in rendered_text
+    assert "<dangerous_tag>" not in rendered_text
+
+
+@pytest.mark.asyncio
+async def test_view_logs_telegram_parse_error_fallback(session_factory, seed_user_with_secret):
+    user, _ = seed_user_with_secret
+    update = MagicMock()
+    update.effective_user.id = user.telegram_user_id
+    query = MagicMock()
+    query.answer = AsyncMock()
+
+    # First call with parse_mode raises entity parsing error, second call (fallback) succeeds
+    query.edit_message_text = AsyncMock(side_effect=[Exception("Can't parse entities"), None])
+    query.data = "settings:logs:1"
+    update.callback_query = query
+
+    context = MagicMock()
+    context.bot_data = {"session_factory": session_factory}
+
+    async with session_factory() as session:
+        session.add(AccessLog(user_id=user.id, action="miniapp_login", success=True))
+        await session.commit()
+
+    await handle_view_logs_callback(update, context)
+
+    assert query.edit_message_text.call_count == 2
+    # Fallback call should not specify parse_mode (plain text)
+    fallback_kwargs = query.edit_message_text.call_args_list[1][1]
+    assert "parse_mode" not in fallback_kwargs
 
 
 @pytest.mark.asyncio

@@ -1,3 +1,4 @@
+import html
 import io
 from datetime import datetime
 from typing import Optional
@@ -724,6 +725,7 @@ async def handle_view_logs_callback(update: Update, context: ContextTypes.DEFAUL
     log_lines = []
     action_names = {
         "view_code": "Lihat Kode",
+        "view_otp": "Lihat OTP",
         "view_all_codes": "Lihat Semua Kode",
         "view_all_pin_fail": "PIN Semua Kode Salah",
         "add_account": "Tambah Akun",
@@ -734,17 +736,29 @@ async def handle_view_logs_callback(update: Update, context: ContextTypes.DEFAUL
         "import": "Impor Cadangan",
         "pin_change": "Ganti PIN",
         "manage_account": "Kelola Akun",
+        "miniapp_login": "Login Mini App",
+        "miniapp_view_codes": "Lihat Kode (Mini App)",
+        "miniapp_add_account": "Tambah Akun (Mini App)",
+        "miniapp_delete_account": "Hapus Akun (Mini App)",
+        "miniapp_hotp_next": "Counter HOTP (Mini App)",
+        "miniapp_edit_account": "Ubah Akun (Mini App)",
+        "miniapp_change_pin": "Ganti PIN (Mini App)",
+        "miniapp_export_backup": "Ekspor Cadangan (Mini App)",
+        "miniapp_import_backup": "Impor Cadangan (Mini App)",
     }
 
     for log in logs:
         # Convert UTC timestamp to local server time (respects VPS/system timezone)
         time_str = format_local_timestamp(log.created_at, "%Y-%m-%d %H:%M")
         status = "✅ Sukses" if log.success else "❌ Gagal"
-        action = action_names.get(log.action, log.action)
-        log_lines.append(f"• `{time_str}` {action} ({status})")
+        raw_action = str(log.action or "unknown")
+        action = action_names.get(raw_action, raw_action.replace("_", " ").title())
+        safe_action = html.escape(action)
+        safe_time = html.escape(time_str)
+        log_lines.append(f"• <code>{safe_time}</code> {safe_action} ({status})")
 
-    body = "\n".join(log_lines) if log_lines else "_Belum ada riwayat aktivitas._"
-    header = f"📜 **Log Akses & Keamanan (Hal {page}/{total_pages})**\n\n"
+    body = "\n".join(log_lines) if log_lines else "<i>Belum ada riwayat aktivitas.</i>"
+    header = f"📜 <b>Log Akses & Keamanan (Hal {page}/{total_pages})</b>\n\n"
     text = header + body
 
     nav_buttons = []
@@ -761,9 +775,20 @@ async def handle_view_logs_callback(update: Update, context: ContextTypes.DEFAUL
     markup = InlineKeyboardMarkup(keyboard)
     if query:
         try:
-            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+            await query.edit_message_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
         except Exception as e:
-            if "Message is not modified" not in str(e):
+            if "Message is not modified" in str(e):
+                return
+            try:
+                plain_body = "\n".join(
+                    f"• {format_local_timestamp(l.created_at, '%Y-%m-%d %H:%M')} "
+                    f"{action_names.get(str(l.action or 'unknown'), str(l.action or 'unknown').replace('_', ' ').title())} "
+                    f"({'✅ Sukses' if l.success else '❌ Gagal'})"
+                    for l in logs
+                ) if logs else "Belum ada riwayat aktivitas."
+                plain_header = f"📜 Log Akses & Keamanan (Hal {page}/{total_pages})\n\n"
+                await query.edit_message_text(plain_header + plain_body, reply_markup=markup)
+            except Exception:
                 pass
 
 
