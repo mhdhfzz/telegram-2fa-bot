@@ -77,6 +77,7 @@ from handlers.view_all_codes import (
     handle_view_all_pin_keypad,
     handle_view_all_refresh,
 )
+from services.maintenance_service import run_full_maintenance
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -314,6 +315,42 @@ async def on_startup(app: Application) -> None:
             logger.info("Mini App web server running on %s:%d", settings.mini_app_host, settings.mini_app_port)
         except Exception as exc:
             logger.error("Failed to start Mini App web server: %s", exc)
+
+    if app.job_queue:
+        interval_secs = max(3600, getattr(settings, "maintenance_interval_hours", 6) * 3600)
+        app.job_queue.run_repeating(
+            maintenance_job_callback,
+            interval=interval_secs,
+            first=60,
+            name="scheduled_maintenance",
+        )
+        logger.info("Scheduled periodic maintenance job every %d hours.", interval_secs // 3600)
+
+
+async def maintenance_job_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Job berkala untuk membersihkan audit log kadaluarsa, WAL checkpoint, dan trim RAM."""
+    engine = context.bot_data.get("engine")
+    session_factory = context.bot_data.get("session_factory")
+    runner = context.bot_data.get("mini_app_runner")
+    settings = context.bot_data.get("settings") or get_settings()
+    retention_days = getattr(settings, "log_retention_days", 30)
+
+    try:
+        stats = await run_full_maintenance(
+            engine=engine,
+            session_factory=session_factory,
+            mini_app_runner=runner,
+            application=context.application,
+            retention_days=retention_days,
+        )
+        logger.info(
+            "Periodic maintenance completed: purged %d logs, WAL checkpoint=%s, sessions cleaned=%s",
+            stats.get("deleted_logs", 0),
+            stats.get("wal_checkpoint", False),
+            stats.get("sessions_cleaned", False),
+        )
+    except Exception as exc:
+        logger.warning("Error running periodic maintenance job: %s", exc)
 
 
 async def on_shutdown(app: Application) -> None:
