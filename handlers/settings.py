@@ -7,7 +7,15 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from crypto.cipher import decrypt_secret, encrypt_secret
-from crypto.kdf import derive_encryption_key, generate_salt, hash_pin, verify_pin
+from crypto.kdf import (
+    async_derive_encryption_key,
+    async_hash_pin,
+    async_verify_pin,
+    derive_encryption_key,
+    generate_salt,
+    hash_pin,
+    verify_pin,
+)
 from crypto.recovery import generate_recovery_phrase, hash_recovery_phrase
 from db.models import Account, User
 from handlers.keypad import (
@@ -203,7 +211,7 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                         )
                         return
 
-                    if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+                    if not await async_verify_pin(buf, user.pin_hash_salt, user.pin_hash):
                         locked_now, rem = await record_failed_pin_attempt(session, user)
                         await log_action(session, user.id, "pin_change", False)
                         clear_keypad_buffer(context.user_data, "ch_pin_old")
@@ -341,11 +349,11 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                     await query.edit_message_text("❌ Pengguna tidak terdaftar.", reply_markup=kb)
                     return
 
-                old_key = derive_encryption_key(old_pin, user.kdf_salt)
+                old_key = await async_derive_encryption_key(old_pin, user.kdf_salt)
 
                 new_kdf_salt = generate_salt()
                 new_pin_salt = generate_salt()
-                new_key = derive_encryption_key(new_pin, new_kdf_salt)
+                new_key = await async_derive_encryption_key(new_pin, new_kdf_salt)
 
                 acc_stmt = select(Account).where(Account.user_id == user.id)
                 accounts = list((await session.execute(acc_stmt)).scalars().all())
@@ -361,7 +369,7 @@ async def handle_change_pin_keypad(update: Update, context: ContextTypes.DEFAULT
 
                     user.kdf_salt = new_kdf_salt
                     user.pin_hash_salt = new_pin_salt
-                    user.pin_hash = hash_pin(new_pin, new_pin_salt)
+                    user.pin_hash = await async_hash_pin(new_pin, new_pin_salt)
                     user.recovery_phrase_hash = hash_recovery_phrase(phrase)
                     await record_successful_pin_attempt(session, user)
                     await log_action(session, user.id, "pin_change", True)
@@ -549,7 +557,7 @@ async def handle_export_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                     )
                     return
 
-                if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+                if not await async_verify_pin(buf, user.pin_hash_salt, user.pin_hash):
                     locked_now, rem = await record_failed_pin_attempt(session, user)
                     await log_action(session, user.id, "export", False)
                     clear_keypad_buffer(context.user_data, "export_pin")
@@ -655,7 +663,7 @@ async def handle_export_passphrase_message(
             stmt = select(User).where(User.telegram_user_id == user_id)
             user = (await session.execute(stmt)).scalars().first()
             if user:
-                key = derive_encryption_key(pin, user.kdf_salt)
+                key = await async_derive_encryption_key(pin, user.kdf_salt)
                 acc_stmt = select(Account).where(Account.user_id == user.id)
                 accounts = list((await session.execute(acc_stmt)).scalars().all())
 
@@ -1064,7 +1072,7 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                     )
                     return
 
-                if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+                if not await async_verify_pin(buf, user.pin_hash_salt, user.pin_hash):
                     locked_now, rem = await record_failed_pin_attempt(session, user)
                     await log_action(session, user.id, "import", False)
                     clear_keypad_buffer(context.user_data, "import_pin")
@@ -1086,7 +1094,7 @@ async def handle_import_pin_keypad(update: Update, context: ContextTypes.DEFAULT
                     return
 
                 await record_successful_pin_attempt(session, user)
-                key = derive_encryption_key(buf, user.kdf_salt)
+                key = await async_derive_encryption_key(buf, user.kdf_salt)
 
                 for acc_item in accounts_data:
                     ciph, nonce = encrypt_secret(key, acc_item["secret"])

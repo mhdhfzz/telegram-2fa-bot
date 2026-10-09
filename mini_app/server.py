@@ -9,7 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from config import get_settings
 from crypto.cipher import decrypt_secret, encrypt_secret
-from crypto.kdf import derive_encryption_key, generate_salt, hash_pin, verify_pin
+from crypto.kdf import (
+    async_derive_encryption_key,
+    async_hash_pin,
+    async_verify_pin,
+    derive_encryption_key,
+    generate_salt,
+    hash_pin,
+    verify_pin,
+)
 from db.models import Account, AccessLog, User
 from mini_app.crypto_utils import MiniAppSessionManager, validate_telegram_init_data
 from services.icon_service import get_issuer_info
@@ -218,7 +226,7 @@ class MiniAppHandler:
                     "error": f"Akun terkunci karena terlalu banyak kesalahan PIN. Tunggu {remaining} detik lagi.",
                 }, status=403)
 
-            is_valid_pin = verify_pin(pin, user.pin_hash_salt, user.pin_hash)
+            is_valid_pin = await async_verify_pin(pin, user.pin_hash_salt, user.pin_hash)
             if not is_valid_pin:
                 await record_failed_pin_attempt(session, user)
                 await log_action(session, user.id, "miniapp_login", success=False)
@@ -231,7 +239,7 @@ class MiniAppHandler:
                 }, status=401)
 
             await record_successful_pin_attempt(session, user)
-            derived_key = derive_encryption_key(pin, user.kdf_salt)
+            derived_key = await async_derive_encryption_key(pin, user.kdf_salt)
             await log_action(session, user.id, "miniapp_login", success=True)
 
             token = self.session_manager.create_session(user.id, derived_key, ttl_seconds=300)
@@ -546,14 +554,14 @@ class MiniAppHandler:
             if not user:
                 return json_response({"error": "User not found"}, status=404)
 
-            if not verify_pin(old_pin, user.pin_hash_salt, user.pin_hash):
+            if not await async_verify_pin(old_pin, user.pin_hash_salt, user.pin_hash):
                 await log_action(session, user_id, "miniapp_change_pin", success=False)
                 return json_response({"success": False, "error": "PIN lama salah."}, status=401)
 
             new_pin_salt = generate_salt()
             new_kdf_salt = generate_salt()
-            new_pin_hash = hash_pin(new_pin, new_pin_salt)
-            new_derived_key = derive_encryption_key(new_pin, new_kdf_salt)
+            new_pin_hash = await async_hash_pin(new_pin, new_pin_salt)
+            new_derived_key = await async_derive_encryption_key(new_pin, new_kdf_salt)
 
             acc_stmt = select(Account).where(Account.user_id == user_id)
             accounts = (await session.execute(acc_stmt)).scalars().all()

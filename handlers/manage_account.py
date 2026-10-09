@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
-from crypto.kdf import verify_pin
+from crypto.kdf import async_verify_pin, verify_pin
 from db.models import Account, User
 from handlers.keypad import (
     build_keypad_keyboard,
@@ -400,7 +400,7 @@ async def handle_delete_account_pin_keypad(
                 )
                 return
 
-            if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+            if not await async_verify_pin(buf, user.pin_hash_salt, user.pin_hash):
                 locked_now, rem = await record_failed_pin_attempt(session, user)
                 await log_action(session, user.id, "delete_account", False, account_id=account_id)
                 clear_keypad_buffer(context.user_data, "del_pin")

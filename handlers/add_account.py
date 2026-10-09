@@ -5,7 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from crypto.cipher import encrypt_secret
-from crypto.kdf import derive_encryption_key, verify_pin
+from crypto.kdf import async_derive_encryption_key, async_verify_pin, derive_encryption_key, verify_pin
 from db.models import Account, User
 from handlers.keypad import (
     build_keypad_keyboard,
@@ -450,7 +450,7 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
                     )
                     return
 
-                if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+                if not await async_verify_pin(buf, user.pin_hash_salt, user.pin_hash):
                     locked_now, rem = await record_failed_pin_attempt(session, user)
                     await log_action(session, user.id, "add_account", False)
                     clear_keypad_buffer(context.user_data, "add_acc_pin")
@@ -469,7 +469,7 @@ async def handle_add_account_pin_keypad(update: Update, context: ContextTypes.DE
                     return
 
                 await record_successful_pin_attempt(session, user)
-                enc_key = derive_encryption_key(buf, user.kdf_salt)
+                enc_key = await async_derive_encryption_key(buf, user.kdf_salt)
                 ciphertext, nonce = encrypt_secret(enc_key, pending["secret"])
 
                 new_acc = Account(

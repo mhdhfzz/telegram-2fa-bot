@@ -1,3 +1,4 @@
+import asyncio
 import hmac
 import os
 from argon2.low_level import Type, hash_secret_raw
@@ -57,3 +58,19 @@ def verify_pin(pin: str, salt_hex: str, expected_hash_hex: str) -> bool:
 def derive_encryption_key(pin: str, salt_hex: str) -> bytes:
     """Derive a 256-bit (32-byte) AES key from PIN and user's kdf_salt."""
     return derive_raw_argon2(pin, salt_hex, hash_len=32)
+
+
+async def async_verify_pin(pin: str, salt_hex: str, expected_hash_hex: str) -> bool:
+    """Verify PIN asynchronously off the main event loop thread."""
+    return await asyncio.to_thread(verify_pin, pin, salt_hex, expected_hash_hex)
+
+
+async def async_hash_pin(pin: str, salt_hex: str) -> str:
+    """Hash a PIN asynchronously off the main event loop thread."""
+    return await asyncio.to_thread(hash_pin, pin, salt_hex)
+
+
+async def async_derive_encryption_key(pin: str, salt_hex: str) -> bytes:
+    """Derive a 256-bit AES key asynchronously off the main event loop thread."""
+    return await asyncio.to_thread(derive_encryption_key, pin, salt_hex)
+

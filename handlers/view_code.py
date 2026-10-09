@@ -6,7 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from crypto.cipher import decrypt_secret
-from crypto.kdf import derive_encryption_key, verify_pin
+from crypto.kdf import async_derive_encryption_key, async_verify_pin, derive_encryption_key, verify_pin
 from db.models import Account, User
 from handlers.keypad import (
     build_keypad_keyboard,
@@ -461,7 +461,7 @@ async def handle_view_code_pin_keypad(
                 clear_keypad_buffer(context.user_data, "view_pin")
                 return
 
-            if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+            if not await async_verify_pin(buf, user.pin_hash_salt, user.pin_hash):
                 locked_now, rem = await record_failed_pin_attempt(session, user)
                 await log_action(session, user.id, "pin_fail", False, account_id=account_id)
                 clear_keypad_buffer(context.user_data, "view_pin")
@@ -494,7 +494,7 @@ async def handle_view_code_pin_keypad(
                 return
 
             # Decrypt secret
-            key = derive_encryption_key(buf, user.kdf_salt)
+            key = await async_derive_encryption_key(buf, user.kdf_salt)
             clear_keypad_buffer(context.user_data, "view_pin")
             context.user_data.pop("view_account_id", None)
 
@@ -597,8 +597,8 @@ async def handle_view_code_pin_keypad(
                     }
                     context.job_queue.run_repeating(
                         view_code_countdown_job,
-                        interval=5,
-                        first=5,
+                        interval=10,
+                        first=10,
                         data=job_data,
                         chat_id=chat_id,
                         name=f"countdown_{chat_id}_{msg_id}",

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
-from crypto.kdf import generate_salt, hash_pin
+from crypto.kdf import async_hash_pin, generate_salt, hash_pin
 from crypto.recovery import generate_recovery_phrase, hash_recovery_phrase
 from db.models import User
 from handlers.keypad import (
@@ -165,7 +165,7 @@ async def handle_setup_pin_keypad(update: Update, context: ContextTypes.DEFAULT_
             session_factory = context.bot_data.get("session_factory")
             pin_salt = generate_salt()
             kdf_salt = generate_salt()
-            pin_hash_val = hash_pin(pin1, pin_salt)
+            pin_hash_val = await async_hash_pin(pin1, pin_salt)
 
             phrase = generate_recovery_phrase(language="en")
             phrase_hash_val = hash_recovery_phrase(phrase)

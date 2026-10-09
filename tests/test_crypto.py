@@ -158,3 +158,24 @@ def test_crypto_defensive_parameters():
         decrypt_secret(key, b"cipher", None)  # type: ignore
 
 
+@pytest.mark.asyncio
+async def test_async_kdf_wrappers():
+    from crypto.kdf import (
+        async_derive_encryption_key,
+        async_hash_pin,
+        async_verify_pin,
+    )
+
+    pin = "123456"
+    salt = generate_salt()
+    p_hash = await async_hash_pin(pin, salt)
+    assert isinstance(p_hash, str) and len(p_hash) > 0
+
+    assert await async_verify_pin(pin, salt, p_hash) is True
+    assert await async_verify_pin("999999", salt, p_hash) is False
+
+    key = await async_derive_encryption_key(pin, salt)
+    assert isinstance(key, bytes) and len(key) == 32
+
+
+

@@ -7,7 +7,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from crypto.cipher import decrypt_secret
-from crypto.kdf import derive_encryption_key, verify_pin
+from crypto.kdf import async_derive_encryption_key, async_verify_pin, derive_encryption_key, verify_pin
 from db.models import Account, User
 from handlers.keypad import (
     build_keypad_keyboard,
@@ -240,7 +240,7 @@ async def handle_view_all_pin_keypad(
                 clear_keypad_buffer(context.user_data, "view_all_pin")
                 return
 
-            if not verify_pin(buf, user.pin_hash_salt, user.pin_hash):
+            if not await async_verify_pin(buf, user.pin_hash_salt, user.pin_hash):
                 locked_now, rem = await record_failed_pin_attempt(session, user)
                 await log_action(session, user.id, "view_all_pin_fail", False)
                 clear_keypad_buffer(context.user_data, "view_all_pin")
@@ -276,7 +276,7 @@ async def handle_view_all_pin_keypad(
                 await query.edit_message_text("❌ Tidak ada akun tersimpan.", reply_markup=kb)
                 return
 
-            key = derive_encryption_key(buf, user.kdf_salt)
+            key = await async_derive_encryption_key(buf, user.kdf_salt)
             clear_keypad_buffer(context.user_data, "view_all_pin")
 
             decrypted_accounts = []
@@ -360,8 +360,8 @@ async def handle_view_all_pin_keypad(
             }
             context.job_queue.run_repeating(
                 view_all_countdown_job,
-                interval=5,
-                first=5,
+                interval=10,
+                first=10,
                 chat_id=chat_id,
                 user_id=update.effective_user.id if update.effective_user else None,
                 data=job_data,
