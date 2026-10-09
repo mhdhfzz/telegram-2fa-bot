@@ -51,7 +51,7 @@ def render_view_all_page(
     """Render a 10-account page formatted with 1 account per line and pagination keyboard."""
     lines = [
         f"🔑 <b>Semua Kode OTP (Halaman {page}/{total_pages})</b>",
-        f"⏱️ <i>Auto-refresh tiap 5 detik • Dihapus dalam {auto_del_secs} detik.</i>\n",
+        f"⏱️ <i>Auto-refresh tiap 10 detik • Dihapus dalam {auto_del_secs} detik.</i>\n",
     ]
 
     for idx, acc in enumerate(accounts_slice, start=start_index):

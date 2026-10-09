@@ -252,7 +252,7 @@ async def handle_search_query_message(update: Update, context: ContextTypes.DEFA
     safe_query = escape_markdown(search_query, version=1)
 
     if not accounts:
-        text = f"🔍 Hasil pencarian untuk '`{safe_query}`':\n\n❌ Tidak ada akun yang cocok."
+        text = f"🔍 Hasil pencarian untuk *{safe_query}*:\n\n❌ Tidak ada akun yang cocok."
         markup = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔍 Cari Lagi", callback_data="menu:search_account")],
             [InlineKeyboardButton("🔙 Menu Utama", callback_data="menu:back_to_main")],
@@ -272,7 +272,7 @@ async def handle_search_query_message(update: Update, context: ContextTypes.DEFA
 
     limit_note = "\n_(Menampilkan 20 hasil teratas)_" if len(accounts) > 20 else ""
     text = (
-        f"🔍 Hasil pencarian untuk '`{safe_query}`' ({len(accounts)} akun):{limit_note}\n"
+        f"🔍 Hasil pencarian untuk *{safe_query}* ({len(accounts)} akun):{limit_note}\n\n"
         "Pilih akun untuk melihat kode OTP:"
     )
     await update.message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.MARKDOWN)

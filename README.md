@@ -28,7 +28,7 @@ Seluruh navigasi berbasis **inline button**, **inline numeric keypad**, dan **Te
 - 🔢 **Inline Numeric Keypad**: Input PIN dilakukan melalui grid tombol inline interaktif (`0-9`, `⌫`, `✅`, `❌`) dengan display tersamar (`PIN: • • • • _ _`).
 - 📏 **Panjang PIN Dinamis**: Panjang PIN dapat dikonfigurasi fleksibel (`PIN_LENGTH=4` hingga `PIN_LENGTH=8`, default: 6 digit) melalui environment variable.
 - 📋 **Tap-to-Copy Monospace OTP**: Kode OTP diformat dalam tag monospace tanpa spasi (`<code>123456</code>`), memudahkan pengguna menyalin kode cukup dengan satu sentuhan.
-- 👁️ **Lihat Semua Kode OTP Sekaligus**: Buka seluruh kode OTP akun hanya dengan 1x input PIN. Tampilan ringkas (1 akun per baris dengan tap-to-copy), pagination responsif (hingga 10 akun per halaman), auto-refresh serentak tiap 5 detik, auto-delete pesan dalam 90 detik, dan zero persistence disk (secret hanya di memori sementara).
+- 👁️ **Lihat Semua Kode OTP Sekaligus**: Buka seluruh kode OTP akun hanya dengan 1x input PIN. Tampilan ringkas (1 akun per baris dengan tap-to-copy), pagination responsif (hingga 10 akun per halaman), auto-refresh serentak tiap 10 detik, auto-delete pesan dalam 90 detik, dan zero persistence disk (secret hanya di memori sementara).
 - ⏳ **Visual Countdown Bar & Dynamic Auto-Refresh**: Progres bar visual sisa waktu kode TOTP (`⏳ [■■■■■■□□□□] 18 detik lagi`) otomatis memperbarui kode saat window waktu berganti, serta dilengkapi tombol refresh manual (mendukung HOTP increment counter & TOTP) tanpa bentrok sesi PIN.
 - ⏱️ **Auto-Delete Pesan Sensitif & Pembersihan Otomatis Obrolan**:
   - Pesan berisi kode OTP, recovery phrase, atau dokumen cadangan dihapus otomatis setelah 90 detik (`AUTO_DELETE_SECONDS`).

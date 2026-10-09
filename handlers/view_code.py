@@ -5,6 +5,7 @@ from sqlalchemy import select
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
+from telegram.helpers import escape_markdown
 from crypto.cipher import decrypt_secret
 from crypto.kdf import async_derive_encryption_key, async_verify_pin, derive_encryption_key, verify_pin
 from db.models import Account, User
@@ -389,8 +390,9 @@ async def handle_select_account_for_code(
     clear_keypad_buffer(context.user_data, "view_pin")
 
     pin_len = get_pin_length(context)
+    safe_account_label = escape_markdown(account_label, version=1)
     text = (
-        f"🔑 **Buka Kode: {account_label}**\n\n"
+        f"🔑 **Buka Kode: {safe_account_label}**\n\n"
         f"Masukkan PIN {pin_len} digit Anda:\n\n"
         f"`{render_pin_display(0, max_length=pin_len)}`"
     )

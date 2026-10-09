@@ -148,7 +148,6 @@ async def handle_qr_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.effective_chat.send_message(
             f"❌ Format URI OTP tidak valid: {str(exc)}",
             reply_markup=kb,
-            parse_mode=ParseMode.MARKDOWN,
         )
         return
 

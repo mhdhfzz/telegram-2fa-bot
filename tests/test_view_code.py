@@ -392,3 +392,32 @@ async def test_select_account_multi_tenant_and_unregistered(session_factory, see
     update.effective_user.id = user.telegram_user_id
     await handle_select_account_for_code(update, context, 9999)
     assert "❌ Akun tidak ditemukan." in query.edit_message_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_select_account_with_special_characters_in_label(session_factory, seed_user_and_totp_account):
+    from sqlalchemy import select
+
+    user, acc = seed_user_and_totp_account
+    async with session_factory() as session:
+        acc_db = (await session.execute(select(Account).where(Account.id == acc.id))).scalars().first()
+        acc_db.label = "Server_Prod_1*Special"
+        await session.commit()
+
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update = MagicMock()
+    update.callback_query = query
+    update.effective_user.id = user.telegram_user_id
+
+    context = MagicMock()
+    context.bot_data = {"session_factory": session_factory}
+    context.user_data = {}
+
+    await handle_select_account_for_code(update, context, acc.id)
+    query.edit_message_text.assert_called_once()
+    call_args, call_kwargs = query.edit_message_text.call_args
+    # Verify underscores and asterisks are properly escaped for Markdown v1
+    assert "Server\\_Prod\\_1\\*Special" in call_args[0]
+
