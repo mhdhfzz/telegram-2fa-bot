@@ -25,6 +25,10 @@ def get_async_engine(db_path: str = "2fa_bot.db") -> AsyncEngine:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA cache_size=-2000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.execute("PRAGMA mmap_size=0")
         if db_path != ":memory:":
             try:
                 cursor.execute("PRAGMA journal_mode=WAL")
