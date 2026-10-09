@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     mini_app_port: int = 8080
     mini_app_url: str = ""
     admin_user_ids: str = ""
+    log_retention_days: int = 30
+    maintenance_interval_hours: int = 6
 
     def get_admin_ids(self) -> set[int]:
         if not self.admin_user_ids:

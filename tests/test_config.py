@@ -79,3 +79,12 @@ def test_admin_settings_and_helpers():
     assert s_multi.is_admin(111111) is False
 
 
+def test_maintenance_settings_defaults():
+    settings = Settings(_env_file=None, bot_token="tok")
+    assert hasattr(settings, "log_retention_days")
+    assert settings.log_retention_days == 30
+    assert hasattr(settings, "maintenance_interval_hours")
+    assert settings.maintenance_interval_hours == 6
+
+
+
