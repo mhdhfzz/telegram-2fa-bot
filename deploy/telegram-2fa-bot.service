@@ -8,6 +8,10 @@ User=bot2fa
 Group=bot2fa
 WorkingDirectory=/opt/telegram-2fa-bot
 EnvironmentFile=/opt/telegram-2fa-bot/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=MALLOC_ARENA_MAX=2
+MemoryHigh=350M
+MemoryMax=450M
 ExecStart=/opt/telegram-2fa-bot/venv/bin/python /opt/telegram-2fa-bot/bot.py
 Restart=always
 RestartSec=5

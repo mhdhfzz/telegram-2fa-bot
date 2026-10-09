@@ -175,3 +175,36 @@ sudo ufw enable
 ```
 
 Port internal bot `8080` tetap tertutup dari publik karena hanya diakses oleh Nginx secara lokal (`127.0.0.1`).
+
+---
+
+## 10. Optimasi Memori & Cache (Khusus VPS 1 Core / 1GB RAM)
+
+Bot ini telah dioptimalkan secara khusus agar dapat berjalan stabil pada VPS dengan spesifikasi rendah (1 vCPU, 1 GB RAM):
+
+### A. Konfigurasi Swapfile (Sangat Disarankan)
+Untuk mencegah Linux OOM (Out Of Memory) Killer mematikan proses bot ketika terjadi lonjakan beban sistem:
+```bash
+# 1. Alokasikan file swap 1 GB (atau 2 GB)
+sudo fallocate -l 1G /swapfile
+
+# 2. Amankan hak akses file
+sudo chmod 600 /swapfile
+
+# 3. Format dan aktifkan swap
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# 4. Simpan permanen agar aktif saat VPS reboot
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# 5. Verifikasi swap aktif
+free -h
+```
+
+### B. Fitur Optimasi Otomatis Bot
+- **Batas Cache SQLite**: Page cache SQLite dibatasi maksimal 2 MB di RAM (`PRAGMA cache_size = -2000`).
+- **Auto WAL Checkpoint**: File Write-Ahead Log (`2fa_bot.db-wal`) diratakan dan dipangkas berkala setiap 6 jam (`PRAGMA wal_checkpoint(TRUNCATE)`) agar tidak menumpuk di disk.
+- **Auto Pruning Audit Log**: Log audit aktivitas di tabel `access_log` otomatis dibersihkan jika lebih tua dari batas retensi (default 30 hari, dapat diatur via `LOG_RETENTION_DAYS` di `.env`).
+- **Pembersihan Heap Linux (glibc)**: Service systemd menyertakan `MALLOC_ARENA_MAX=2` untuk mencegah fragmentasi heap memori Linux, dan bot menjalankan `malloc_trim` berkala untuk mengembalikan RAM idle langsung ke kernel OS.
+
